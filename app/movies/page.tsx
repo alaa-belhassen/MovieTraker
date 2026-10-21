@@ -1,0 +1,3 @@
+import { getPopularMovies, getTopRatedMovies, getTrendingMovies } from '@/lib/tmdb'
+import { BrowseShell, MovieGrid } from '@/components/browse-grid'
+export default async function MoviesPage({ searchParams }: { searchParams: Promise<{ sort?: string }> }) { const { sort } = await searchParams; const data = sort === 'top_rated' ? await getTopRatedMovies() : sort === 'trending' ? await getTrendingMovies() : await getPopularMovies(); return <BrowseShell title={sort === 'top_rated' ? 'Mieux notés' : sort === 'trending' ? 'Tendances' : 'Films populaires'}><MovieGrid movies={data.results} /></BrowseShell> }

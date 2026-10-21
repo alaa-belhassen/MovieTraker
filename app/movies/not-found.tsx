@@ -1,0 +1,2 @@
+import Link from 'next/link'
+export default function NotFound() { return <main className="grid min-h-screen place-items-center bg-[#080909] px-5 text-center text-white"><div><p className="text-sm uppercase tracking-[0.2em] text-[#d8ff45]">Films</p><h1 className="mt-3 text-4xl font-semibold">Catalogue introuvable</h1><Link href="/movies" className="mt-6 inline-flex rounded-full bg-[#d8ff45] px-5 py-3 font-semibold text-black">Retour aux films</Link></div></main> }
