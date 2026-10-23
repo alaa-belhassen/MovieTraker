@@ -1,12 +1,6 @@
-import ActorPage from '@/components/actor-page'
-import { getActorDetails } from '@/lib/tmdb'
+import { redirect } from 'next/navigation'
 
-export default async function ActorRoute({ params }: { params: Promise<{ id: string }> }) {
+export default async function ActorAlias({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  try {
-    const person = await getActorDetails(Number(id))
-    return <ActorPage id={id} initialPerson={person} />
-  } catch {
-    return <ActorPage id={id} />
-  }
+  redirect(`/acteur/${id}`)
 }

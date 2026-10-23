@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Film, House, Search, Tags, Users, LogIn, LogOut, Share2, MessageSquare, PlayCircle } from 'lucide-react'
+import { Film, House, Search, Tags, Users, LogIn, LogOut, Share2, MessageSquare, PlayCircle, Heart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/auth-provider'
 
@@ -15,6 +15,7 @@ const publicItems = [
 ]
 
 const authenticatedItems = [
+  { href: '/acteurs-favoris', label: 'Suivis', icon: Heart },
   { href: '/listes-partagees', label: 'Listes partagées', icon: Share2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
   { href: '/watch', label: 'Watch Together', icon: PlayCircle },
