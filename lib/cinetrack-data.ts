@@ -44,59 +44,200 @@ export function validateVideoUrl(value: string) {
   try { const parsed = new URL(url); return parsed.protocol === 'https:' }
   catch { return false }
 }
-export type WatchRoomSummary = { id: string; title: string; video_url: string | null; video_provider: string | null; mode: 'video' | 'timer'; status: string; scheduled_at: string | null; host_id: string; role: 'owner' | 'participant' }
+export type WatchRoomSummary = {
+  id: string
+  title: string
+  video_url: string | null
+  video_provider: string | null
+  mode: 'video' | 'timer'
+  status: string
+  scheduled_at: string | null
+  host_id: string
+  role: 'owner' | 'participant'
+  host_username?: string
+  participantCount?: number
+  created_at?: string
+}
+
 export async function getMyWatchRooms(): Promise<WatchRoomSummary[]> {
   const user = await requireUser()
   const client = getSupabase()
-  const { data: owned, error: ownedError } = await client.from('rooms').select('id, title, video_url, video_provider, mode, status, scheduled_at, host_id').eq('host_id', user.id).order('created_at', { ascending: false })
+
+  // 1. Fetch owned rooms (query only existing database columns)
+  const { data: owned, error: ownedError } = await client
+    .from('rooms')
+    .select('id, title, video_url, video_provider, mode, rights_confirmed_at, created_at, updated_at, host_id, movie_id')
+    .eq('host_id', user.id)
+    .order('created_at', { ascending: false })
   if (ownedError) throw ownedError
-  const { data: memberships, error: membershipError } = await client.from('room_participants').select('room_id').eq('user_id', user.id)
+
+  // 2. Fetch memberships
+  const { data: memberships, error: membershipError } = await client
+    .from('room_participants')
+    .select('room_id')
+    .eq('user_id', user.id)
   if (membershipError) throw membershipError
+
   const ownedIds = new Set((owned ?? []).map((room) => room.id))
-  const invitedIds = (memberships ?? []).map((membership) => membership.room_id).filter((id) => !ownedIds.has(id))
-  if (!invitedIds.length) return (owned ?? []).map((room) => ({ ...room, role: 'owner' as const }))
-  const { data: invited, error: invitedError } = await client.from('rooms').select('id, title, video_url, video_provider, mode, status, scheduled_at, host_id').in('id', invitedIds).order('created_at', { ascending: false })
-  if (invitedError) throw invitedError
-  return [...(owned ?? []).map((room) => ({ ...room, role: 'owner' as const })), ...(invited ?? []).map((room) => ({ ...room, role: 'participant' as const }))]
+  const invitedIds = (memberships ?? []).map((m) => m.room_id).filter((id) => !ownedIds.has(id))
+
+  let invited: any[] = []
+  if (invitedIds.length > 0) {
+    const { data: invitedData, error: invitedError } = await client
+      .from('rooms')
+      .select('id, title, video_url, video_provider, mode, rights_confirmed_at, created_at, updated_at, host_id, movie_id')
+      .in('id', invitedIds)
+      .order('created_at', { ascending: false })
+    if (invitedError) throw invitedError
+    invited = invitedData ?? []
+  }
+
+  // 3. Fetch host profiles for invited rooms
+  const hostIds = Array.from(new Set(invited.map((r) => r.host_id).filter(Boolean)))
+  const hostMap: Record<string, string> = {}
+  if (hostIds.length > 0) {
+    const { data: profiles } = await client.from('profiles').select('id, username').in('id', hostIds)
+    profiles?.forEach((p) => {
+      if (p.id && p.username) hostMap[p.id] = p.username
+    })
+  }
+
+  const formatRoom = (room: any, role: 'owner' | 'participant'): WatchRoomSummary => ({
+    id: room.id,
+    title: room.title,
+    video_url: room.video_url,
+    video_provider: room.video_provider,
+    mode: room.mode ?? 'video',
+    status: 'active',
+    scheduled_at: room.created_at ?? null,
+    created_at: room.created_at,
+    host_id: room.host_id,
+    role,
+    host_username: role === 'participant' ? (hostMap[room.host_id] || 'Un ami') : undefined,
+  })
+
+  return [
+    ...(owned ?? []).map((r) => formatRoom(r, 'owner')),
+    ...invited.map((r) => formatRoom(r, 'participant')),
+  ]
 }
 
-export async function createRoom(input: { title: string; videoUrl: string; movieId?: number; mode?: 'video' | 'timer' }) {
+export async function createRoom(input: {
+  title: string
+  videoUrl?: string
+  movieId?: number
+  mode?: 'video' | 'timer'
+  invitedUsernames?: string[]
+}) {
   const user = await requireUser()
   const title = input.title.trim().slice(0, 120)
-  const videoUrl = input.videoUrl.trim()
-  if (!title) throw new Error('Donnez un titre à votre salon.')
-  if (!validateVideoUrl(videoUrl)) throw new Error('Lien vidéo invalide.')
+  const mode = input.mode ?? 'video'
+  const videoUrl = (input.videoUrl ?? '').trim()
 
-  // Generate the id client-side so creation does not depend on a follow-up
-  // SELECT, which can be denied by RLS even when the INSERT is permitted.
+  if (!title) throw new Error('Donnez un titre à votre salon.')
+  if (mode === 'video') {
+    if (!videoUrl || !validateVideoUrl(videoUrl)) {
+      throw new Error('Ajoutez un lien HTTPS valide.')
+    }
+  }
+
   const payload = {
     id: crypto.randomUUID(),
     host_id: user.id,
     title,
     movie_id: input.movieId ?? null,
-    video_url: videoUrl,
-    video_provider: detectVideoProvider(videoUrl),
-    mode: input.mode ?? 'video',
+    video_url: videoUrl || null,
+    video_provider: videoUrl ? detectVideoProvider(videoUrl) : null,
+    mode,
     rights_confirmed_at: new Date().toISOString(),
   }
-  const { error } = await getSupabase().from('rooms').insert(payload)
+
+  const client = getSupabase()
+  const { error } = await client.from('rooms').insert(payload)
   if (error) {
-    console.error('[CinéTrack] room creation failed', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    })
+    console.error('[CinéTrack] room creation failed', error)
     if (error.code === '23514') throw new Error('Les informations du salon sont invalides.')
     if (error.code === '42501') throw new Error('Vous devez être connecté pour créer un salon.')
     throw new Error('Impossible de créer le salon. Réessayez.')
   }
+
+  // Host also added to participants
+  try {
+    await client.from('room_participants').upsert(
+      { room_id: payload.id, user_id: user.id },
+      { onConflict: 'room_id,user_id' }
+    )
+  } catch {}
+
+  // Invite friends by pseudo if specified
+  if (input.invitedUsernames && input.invitedUsernames.length > 0) {
+    const cleanUsernames = input.invitedUsernames
+      .map((u) => u.replace(/^@/, '').trim().toLowerCase())
+      .filter(Boolean)
+
+    if (cleanUsernames.length > 0) {
+      try {
+        const { data: profiles } = await client
+          .from('profiles')
+          .select('id, username')
+          .in('username', cleanUsernames)
+
+        if (profiles && profiles.length > 0) {
+          const participantRows = profiles
+            .filter((p) => p.id !== user.id)
+            .map((p) => ({ room_id: payload.id, user_id: p.id }))
+
+          if (participantRows.length > 0) {
+            await client.from('room_participants').upsert(participantRows, { onConflict: 'room_id,user_id' })
+          }
+        }
+      } catch (err) {
+        console.warn('[CinéTrack] could not invite usernames:', err)
+      }
+    }
+  }
+
   return {
     id: payload.id,
     title: payload.title,
     video_url: payload.video_url,
     video_provider: payload.video_provider,
     mode: payload.mode,
+  }
+}
+
+export async function joinWatchParty(roomId: string) {
+  const user = await requireUser()
+  const client = getSupabase()
+  const cleanId = roomId.trim().replace(/^.*\/watch\//, '').replace(/^.*\/rejoindre\//, '').trim()
+
+  const { data: room, error: roomError } = await client.from('rooms').select('id, host_id, title').eq('id', cleanId).maybeSingle()
+  if (roomError || !room) throw new Error('Salon introuvable.')
+
+  if (room.host_id !== user.id) {
+    const { error } = await client.from('room_participants').upsert(
+      { room_id: room.id, user_id: user.id },
+      { onConflict: 'room_id,user_id' }
+    )
+    if (error) throw error
+  }
+  return room
+}
+
+export async function deleteWatchParty(roomId: string) {
+  const user = await requireUser()
+  const client = getSupabase()
+
+  const { data: room } = await client.from('rooms').select('id, host_id').eq('id', roomId).maybeSingle()
+  if (room && room.host_id === user.id) {
+    await client.from('room_participants').delete().eq('room_id', roomId)
+    const { error } = await client.from('rooms').delete().eq('id', roomId)
+    if (error) throw error
+    return { action: 'deleted' }
+  } else {
+    const { error } = await client.from('room_participants').delete().eq('room_id', roomId).eq('user_id', user.id)
+    if (error) throw error
+    return { action: 'left' }
   }
 }
 export async function updateRoomVideo(roomId: string, value: string) { const user = await requireUser(); const videoUrl = value.trim(); if (!validateVideoUrl(videoUrl)) throw new Error('Lien vidéo invalide.'); const { data, error } = await getSupabase().from('rooms').update({ video_url: videoUrl, video_provider: detectVideoProvider(videoUrl), rights_confirmed_at: new Date().toISOString() }).eq('id', roomId).eq('host_id', user.id).select('id, video_url, video_provider, mode').single(); if (error) throw error; if (data.video_url !== videoUrl) throw new Error('Le lien vidéo n’a pas pu être enregistré.'); return data }
