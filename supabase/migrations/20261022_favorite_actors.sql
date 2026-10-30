@@ -1,4 +1,4 @@
--- C4: followed / favorite actors (TMDB person ids).
+
 -- Run in the Supabase SQL Editor if you want favorites synced to the database.
 
 create table if not exists public.favorite_actors (

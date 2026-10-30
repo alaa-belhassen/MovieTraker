@@ -9,10 +9,14 @@
     "start": "next start"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.104",
+    "@ai-sdk/react": "^4.0.154",
     "@base-ui/react": "^1.5.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@upstash/redis": "^1.39.0",
     "@vercel/analytics": "1.6.1",
+    "ai": "^7.0.150",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dashjs": "^5.2.1",
