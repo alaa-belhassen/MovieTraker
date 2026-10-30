@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/api-auth'
+import { inviteMongoRoomParticipants } from '@/lib/mongodb-data'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
+    const user = await getAuthenticatedUser()
+    if (!user) {
       return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 })
     }
 
@@ -21,19 +21,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invitez au maximum 20 pseudos de 40 caractères chacun.' }, { status: 400 })
     }
 
-    const { data, error } = await supabase.rpc('invite_room_participants', {
-      target_room_id: roomId,
-      target_usernames: usernames,
-    })
-    if (error) {
-      console.error('[CinéTrack] room invitations failed:', error)
-      if (error.message.includes('HOST_REQUIRED')) {
+    let results
+    try {
+      results = await inviteMongoRoomParticipants(roomId, usernames, user.id)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'HOST_REQUIRED') {
         return NextResponse.json({ error: 'Seul l’hôte peut inviter des participants.' }, { status: 403 })
       }
-      return NextResponse.json({ error: 'Impossible d’envoyer les invitations.' }, { status: 400 })
+      if (error instanceof Error && error.message === 'INVALID_INVITES') {
+        return NextResponse.json({ error: 'Invitations invalides.' }, { status: 400 })
+      }
+      throw error
     }
-
-    const results = (data ?? []) as Array<{ requested_username: string; invited_username: string | null }>
     return NextResponse.json({
       invited: results.flatMap((result) => result.invited_username ? [result.invited_username] : []),
       notFound: results.flatMap((result) => result.invited_username ? [] : [result.requested_username]),

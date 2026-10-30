@@ -107,8 +107,13 @@ async function getFilmContextWithinBudget(query: string) {
 }
 
 export async function GET() {
-  const messages = await loadChatHistory()
-  return Response.json({ messages, persistenceEnabled: isChatHistoryConfigured() })
+  try {
+    const messages = await loadChatHistory()
+    return Response.json({ messages, persistenceEnabled: isChatHistoryConfigured() })
+  } catch (error) {
+    console.error('Chat history could not be loaded from MongoDB:', error)
+    return Response.json({ error: 'Unable to load chat history.' }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {

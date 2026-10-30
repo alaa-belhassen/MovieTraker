@@ -117,7 +117,7 @@ export function ChatBot() {
             <div ref={messagesEndRef} />
           </div>
 
-          <p className="px-4 pb-1 text-[11px] text-white/35">{persistenceEnabled ? 'Historique enregistré dans Redis' : 'Historique non enregistré : configurez Upstash Redis'}</p>
+          <p className="px-4 pb-1 text-[11px] text-white/35">{persistenceEnabled ? 'Historique enregistré dans MongoDB' : 'Historique non enregistré : configurez MongoDB'}</p>
           <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/10 p-3">
             <label htmlFor="cinetrack-chat-input" className="sr-only">Votre message</label>
             <input id="cinetrack-chat-input" value={input} onChange={event => setInput(event.target.value)} maxLength={4000} placeholder="Parler de cinéma…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none placeholder:text-white/35 focus:border-[#d8ff45]/60" />

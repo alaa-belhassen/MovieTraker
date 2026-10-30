@@ -1,16 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/api-auth'
+import { joinMongoRoom } from '@/lib/mongodb-data'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (!user || userError) {
+    const user = await getAuthenticatedUser()
+    if (!user) {
       return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 })
     }
 
     const body = await request.json()
-    let roomId = (body.roomId || '').trim()
+    let roomId = typeof body.roomId === 'string' ? body.roomId.trim() : ''
 
     // If the user pasted a full URL, extract the ID
     if (roomId.includes('/watch/')) {
@@ -24,29 +24,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify room exists
-    const { data: room, error: roomError } = await supabase
-      .from('rooms')
-      .select('id, title, host_id')
-      .eq('id', roomId)
-      .maybeSingle()
-
-    if (roomError || !room) {
+    const room = await joinMongoRoom(roomId, user.id)
+    if (!room) {
       return NextResponse.json({ error: 'Salon introuvable. Vérifiez le lien ou le code.' }, { status: 404 })
-    }
-
-    // If not host, join room_participants
-    if (room.host_id !== user.id) {
-      const { error: partError } = await supabase
-        .from('room_participants')
-        .upsert(
-          { room_id: room.id, user_id: user.id },
-          { onConflict: 'room_id,user_id' }
-        )
-
-      if (partError) {
-        console.error('[CinéTrack] failed to join room participants:', partError)
-        return NextResponse.json({ error: 'Impossible de rejoindre le salon.' }, { status: 400 })
-      }
     }
 
     return NextResponse.json({ success: true, roomId: room.id, title: room.title })
