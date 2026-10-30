@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bookmark, Check, Eye } from 'lucide-react'
+import { Bookmark, Check, Eye, Heart } from 'lucide-react'
 import {
   getCurrentUser,
   getMyMovies,
   saveMovie,
+  removeMovie,
 } from '@/lib/cinetrack-data'
 
 export default function MovieListActions({
@@ -15,6 +16,7 @@ export default function MovieListActions({
 }) {
   const [saved, setSaved] = useState(false)
   const [watched, setWatched] = useState(false)
+  const [favorite, setFavorite] = useState(false)
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
   const [error, setError] = useState('')
@@ -48,6 +50,13 @@ export default function MovieListActions({
               movie.status === 'watched'
           )
         )
+        setFavorite(
+  movies.some(
+    (movie) =>
+      movie.movie_id === movieId &&
+      movie.status === 'favorite'
+  )
+)
       } catch {
         if (!cancelled) {
           setError(
@@ -119,7 +128,33 @@ export default function MovieListActions({
       setLoading(false)
     }
   }
+async function toggleFavorite() {
+  setLoading(true)
+  setError('')
 
+  try {
+    const user = await getCurrentUser()
+
+    if (!user) {
+      window.location.href = '/auth/login'
+      return
+    }
+
+    if (favorite) {
+      await removeMovie(movieId, 'favorite')
+      setFavorite(false)
+    } else {
+      await saveMovie(movieId, 'favorite')
+      setFavorite(true)
+    }
+  } catch {
+    setError(
+      "Impossible de modifier les favoris."
+    )
+  } finally {
+    setLoading(false)
+  }
+}
   return (
     <div className="mt-6">
       <div className="flex flex-wrap gap-3">
@@ -167,6 +202,30 @@ export default function MovieListActions({
                 ? 'Déjà vu ✓'
                 : 'Marquer comme vu'}
         </button>
+        {/* Bouton Favoris */}
+<button
+  type="button"
+  onClick={toggleFavorite}
+  disabled={loading || checking}
+  className={`flex items-center gap-2 rounded-xl border px-5 py-3 font-semibold transition disabled:opacity-60 ${
+    favorite
+      ? 'border-red-500 bg-red-500 text-white'
+      : 'border-red-500/50 text-red-400 hover:bg-red-500/10'
+  }`}
+>
+  <Heart
+    size={20}
+    fill={favorite ? 'currentColor' : 'none'}
+  />
+
+  {checking
+    ? 'Vérification...'
+    : loading
+      ? 'Enregistrement...'
+      : favorite
+        ? 'Retirer des favoris'
+        : 'Ajouter aux favoris'}
+</button>
 
       </div>
 
