@@ -34,14 +34,23 @@ export default function LoginPage() {
           })
 
       if (result.error) {
-        const errorMessage = result.error.message.toLowerCase()
-        setMessage(errorMessage.includes('captcha')
-          ? 'La vérification de sécurité a échoué. Rechargez la page puis réessayez.'
-          : errorMessage.includes('invalid')
-            ? 'Email ou mot de passe invalide.'
-            : errorMessage.includes('confirm')
-              ? 'Confirmez votre adresse email avant de vous connecter.'
-              : 'Impossible de terminer la demande. Vérifiez les informations saisies puis réessayez.')
+        const errorMessage = (result.error.message || '').toLowerCase()
+        const status = (result.error as any).status
+        if (errorMessage.includes('rate limit') || errorMessage.includes('rate_limit') || status === 429) {
+          setMessage('Limite d’envoi d’emails atteinte par Supabase. Patientez quelques instants ou connectez-vous avec un compte existant.')
+        } else if (errorMessage.includes('already registered') || errorMessage.includes('user already exists')) {
+          setMessage('Un compte existe déjà avec cette adresse email. Veuillez vous connecter.')
+        } else if (errorMessage.includes('api key') || errorMessage.includes('apikey')) {
+          setMessage('Clé Supabase non trouvée ou non reconnue. Rechargez la page.')
+        } else if (errorMessage.includes('captcha')) {
+          setMessage('La vérification de sécurité a échoué. Rechargez la page puis réessayez.')
+        } else if (errorMessage.includes('invalid') || errorMessage.includes('credentials')) {
+          setMessage('Email ou mot de passe invalide.')
+        } else if (errorMessage.includes('confirm')) {
+          setMessage('Confirmez votre adresse email avant de vous connecter.')
+        } else {
+          setMessage(result.error.message || 'Impossible de terminer la demande. Vérifiez les informations saisies.')
+        }
         return
       }
 
