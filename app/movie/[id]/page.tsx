@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MovieAiSummary } from '@/components/movie-ai-summary'
 import { getMovieDetails, imageUrl } from '@/lib/tmdb'
+import MovieListActions from '@/components/movie-list-actions'
 
 export default async function MoviePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -22,7 +23,63 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
       <div className="absolute inset-0 -z-10 bg-cover bg-center opacity-35" style={backdrop ? { backgroundImage: `linear-gradient(90deg,#080909 12%,rgba(8,9,9,.75),#080909),url(${backdrop})` } : undefined} aria-hidden="true" />
       <div className="mx-auto grid max-w-7xl gap-8 px-5 py-12 sm:px-8 lg:grid-cols-[260px_1fr] lg:py-20">
         <div className="relative aspect-[2/3] overflow-hidden rounded-3xl bg-white/10">{poster ? <Image src={poster} alt={`Affiche de ${movie.title}`} fill sizes="260px" className="object-cover" priority /> : <span className="flex size-full items-center justify-center p-5 text-center text-white/50">Affiche indisponible</span>}</div>
-        <div className="self-end"><p className="text-sm uppercase tracking-[.2em] text-[#d8ff45]">Film</p><h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-6xl">{movie.title}</h1>{movie.tagline && <p className="mt-3 italic text-white/60">{movie.tagline}</p>}<div className="mt-5 flex flex-wrap gap-2 text-sm text-white/65"><span>{movie.release_date?.slice(0,4) || 'Date inconnue'}</span>{runtime && <span>· {runtime}</span>}<span>· {movie.vote_average?.toFixed(1) ?? '—'}/10</span></div><div className="mt-5 flex flex-wrap gap-2">{movie.genres.map(genre => <Link key={genre.id} href={`/genre/${genre.id}`} className="rounded-full bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">{genre.name}</Link>)}</div>{director && <p className="mt-6 text-sm text-white/65">Réalisation : <Link className="text-white hover:text-[#d8ff45]" href={`/acteur/${director.id}`}>{director.name}</Link></p>}<p className="mt-6 max-w-3xl leading-7 text-white/75">{movie.overview || 'Synopsis indisponible.'}</p></div>
+
+<div className="self-end">
+  <p className="text-sm uppercase tracking-[.2em] text-[#d8ff45]">
+    Film
+  </p>
+
+  <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-6xl">
+    {movie.title}
+  </h1>
+
+  {movie.tagline && (
+    <p className="mt-3 italic text-white/60">
+      {movie.tagline}
+    </p>
+  )}
+
+  <div className="mt-5 flex flex-wrap gap-2 text-sm text-white/65">
+    <span>
+      {movie.release_date?.slice(0, 4) || 'Date inconnue'}
+    </span>
+
+    {runtime && <span>· {runtime}</span>}
+
+    <span>· {movie.vote_average?.toFixed(1) ?? '—'}/10</span>
+  </div>
+
+  <div className="mt-5 flex flex-wrap gap-2">
+    {movie.genres.map((genre) => (
+      <Link
+        key={genre.id}
+        href={`/genre/${genre.id}`}
+        className="rounded-full bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
+      >
+        {genre.name}
+      </Link>
+    ))}
+  </div>
+
+  {director && (
+    <p className="mt-6 text-sm text-white/65">
+      Réalisation :{' '}
+      <Link
+        className="text-white hover:text-[#d8ff45]"
+        href={`/actor/${director.id}`}
+      >
+        {director.name}
+      </Link>
+    </p>
+  )}
+
+  <p className="mt-6 max-w-3xl leading-7 text-white/75">
+    {movie.overview || 'Synopsis indisponible.'}
+  </p>
+
+  {/* Module 4 : Ajouter un film à la liste À regarder */}
+  <MovieListActions movieId={movieId} />
+</div>
       </div>
     </section>
     <div className="mx-auto flex max-w-7xl flex-col gap-12 px-5 py-10 sm:px-8">
