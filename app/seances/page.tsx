@@ -1,2 +1,5 @@
-import { SessionsPage } from '@/components/watch-together-feature'
-export default function Page() { return <SessionsPage /> }
+import { redirect } from 'next/navigation'
+
+export default function Page() {
+  redirect('/watch')
+}

@@ -1,6 +1,16 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import {
+  detectVideoProvider,
+  extractVimeoId,
+  extractYouTubeId,
+  validateVideoUrl,
+  type VideoProvider,
+} from '@/lib/video-provider'
+
+export { detectVideoProvider, extractVimeoId, extractYouTubeId, validateVideoUrl }
+export type { VideoProvider }
 
 const getSupabase = () => createClient()
 export const supabase = new Proxy({}, { get: (_, property: string) => (getSupabase() as unknown as Record<string, unknown>)[property] }) as ReturnType<typeof createClient>
