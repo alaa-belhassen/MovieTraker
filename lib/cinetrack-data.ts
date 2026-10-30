@@ -107,3 +107,20 @@ export async function castSharedListVote(listId: string, movieId: number) { cons
 export async function submitReport(targetType: 'topic' | 'message', targetId: string, reason: string) { const user = await requireUser(); const cleanReason = reason.trim().slice(0, 500); if (cleanReason.length < 3) throw new Error('Le motif doit contenir au moins 3 caractères.'); const { error } = await getSupabase().from('content_reports').insert({ reporter_id: user.id, target_type: targetType, target_id: targetId, reason: cleanReason }); if (error) throw error }
 export async function saveMovie(movieId: number, status: 'watchlist' | 'watched' | 'favorite', watchedAt?: string) { const user = await requireUser(); if (status === 'watched') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watchlist'); if (status === 'watchlist') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watched'); const { error } = await getSupabase().from('user_movies').upsert({ user_id: user.id, movie_id: movieId, status, watched_at: watchedAt ?? null }, { onConflict: 'user_id,movie_id,status' }); if (error) throw error }
 export async function getMyMovies() { const user = await requireUser(); const { data, error } = await getSupabase().from('user_movies').select('movie_id, status, watched_at, rating, comment, created_at').eq('user_id', user.id).order('created_at', { ascending: false }); if (error) throw error; return data ?? [] }
+export async function removeMovie(
+  movieId: number,
+  status: "watchlist" | "watched" | "favorite"
+) {
+  const user = await requireUser();
+
+  const { error } = await getSupabase()
+    .from("user_movies")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("movie_id", movieId)
+    .eq("status", status);
+
+  if (error) {
+    throw error;
+  }
+}
