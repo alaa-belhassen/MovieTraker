@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getMongoRoom } from '@/lib/mongodb-data'
 import { WatchRoom, WatchRoomError } from '@/components/watch-page'
 
 export default async function Page({ params }: { params: Promise<{ roomId: string }> }) {
@@ -7,24 +8,21 @@ export default async function Page({ params }: { params: Promise<{ roomId: strin
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect(`/auth/login?next=/watch/${roomId}`)
-  const { data: room, error } = await supabase.from('rooms').select('id, title, video_url, video_provider, mode, host_id').eq('id', roomId).maybeSingle()
-  if (error) {
-    console.error('[CinéTrack] rooms query failed', { message: error.message, code: error.code })
+  let room
+  try {
+    room = await getMongoRoom(roomId, user.id, true)
+  } catch (error) {
+    console.error('[CinéTrack] MongoDB rooms query failed', error)
     return <WatchRoomError />
   }
   if (!room) notFound()
 
-  // Ensure invited participant is added to room_participants in Supabase
-  if (room.host_id !== user.id) {
-    try {
-      await supabase.from('room_participants').upsert(
-        { room_id: room.id, user_id: user.id },
-        { onConflict: 'room_id,user_id' }
-      )
-    } catch (err) {
-      console.warn('[CinéTrack] participant upsert warning:', err)
-    }
-  }
-
-  return <WatchRoom initialRoom={room} isHost={room.host_id === user.id} />
+  return <WatchRoom initialRoom={{
+    id: room.id,
+    title: room.title,
+    video_url: room.video_url,
+    video_provider: room.video_provider,
+    mode: room.mode,
+    host_id: room.host_id,
+  }} isHost={room.host_id === user.id} />
 }

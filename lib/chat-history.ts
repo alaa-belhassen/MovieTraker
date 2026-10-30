@@ -1,26 +1,24 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
-import { Redis } from '@upstash/redis'
 import type { UIMessage } from 'ai'
+import type { Document } from 'mongodb'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { getMongoDatabase } from '@/lib/mongodb'
 
 const CHAT_SESSION_COOKIE = 'cinetrack_chat_session'
 const CHAT_HISTORY_TTL_SECONDS = 60 * 60 * 24 * 60
 
-let redisClient: Redis | null | undefined
-
-function getRedisClient() {
-  if (redisClient !== undefined) return redisClient
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  redisClient = url?.trim() && token?.trim() ? new Redis({ url, token }) : null
-  return redisClient
+type ChatHistoryDocument = Document & {
+  owner_key: string
+  messages: UIMessage[]
+  expires_at: Date
+  updated_at: Date
 }
 
 export function isChatHistoryConfigured() {
-  return getRedisClient() !== null
+  return Boolean(process.env.MONGODB_URI?.trim())
 }
 
 export async function getChatOwnerKey() {
@@ -48,23 +46,28 @@ export async function getChatOwnerKey() {
 }
 
 export async function loadChatHistory() {
-  const redis = getRedisClient()
-  if (!redis) return []
-  try {
-    const ownerKey = await getChatOwnerKey()
-    return (await redis.get<UIMessage[]>(ownerKey)) ?? []
-  } catch (error) {
-    console.error('Chat history could not be loaded from Redis:', error)
-    return []
-  }
+  if (!isChatHistoryConfigured()) return []
+  const ownerKey = await getChatOwnerKey()
+  const database = await getMongoDatabase()
+  const history = await database.collection<ChatHistoryDocument>('chat_history').findOne({
+    owner_key: ownerKey,
+    expires_at: { $gt: new Date() },
+  })
+  return history?.messages ?? []
 }
 
 export async function saveChatHistory(ownerKey: string, messages: UIMessage[]) {
-  const redis = getRedisClient()
-  if (!redis) return
-  try {
-    await redis.set(ownerKey, messages.slice(-20), { ex: CHAT_HISTORY_TTL_SECONDS })
-  } catch (error) {
-    console.error('Chat history could not be saved to Redis:', error)
-  }
+  if (!isChatHistoryConfigured()) return
+  const database = await getMongoDatabase()
+  const now = new Date()
+  await database.collection<ChatHistoryDocument>('chat_history').replaceOne(
+    { owner_key: ownerKey },
+    {
+      owner_key: ownerKey,
+      messages: messages.slice(-20),
+      expires_at: new Date(now.getTime() + CHAT_HISTORY_TTL_SECONDS * 1000),
+      updated_at: now,
+    },
+    { upsert: true },
+  )
 }

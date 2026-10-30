@@ -9,7 +9,6 @@ import {
   extractVimeoId,
   extractYouTubeId,
   getMyWatchRooms,
-  supabase,
   updateRoomVideo,
   validateVideoUrl,
   type WatchRoomSummary,
@@ -135,7 +134,7 @@ function CreateRoom({
             <div>
               <h2 className="text-2xl font-semibold">Votre salon est prêt !</h2>
               <p className="mt-1 text-sm text-[#a7aaa7]">
-                Enregistré dans Supabase. Partagez le lien avec vos amis pour qu’ils vous rejoignent.
+                Enregistré dans MongoDB. Partagez le lien avec vos amis pour qu’ils vous rejoignent.
               </p>
               {invitationNotice && <p role="status" className="mt-3 text-sm text-[#d8ff45]">{invitationNotice}</p>}
             </div>
@@ -276,7 +275,7 @@ function CreateRoom({
             onClick={submit}
             className="rounded-xl bg-[#d8ff45] py-3 font-semibold text-black transition hover:brightness-105 disabled:opacity-60"
           >
-            {saving ? 'Création et enregistrement dans Supabase…' : 'Créer le salon'}
+            {saving ? 'Création et enregistrement dans MongoDB…' : 'Créer le salon'}
           </button>
         </div>
       </div>
@@ -498,7 +497,7 @@ function EmptySalons({ onCreate }: { onCreate: () => void }) {
       </div>
       <h2 className="mt-5 text-xl font-semibold">Aucun salon pour le moment</h2>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#a7aaa7]">
-        Créez un salon dans Supabase et invitez vos proches à partager votre prochaine séance cinéma en direct.
+        Créez un salon dans MongoDB et invitez vos proches à partager votre prochaine séance cinéma en direct.
       </p>
       <button
         onClick={onCreate}
@@ -601,7 +600,7 @@ export function WatchLanding() {
     <Layout eyebrow="Watch Together" title="Mes séances en direct">
       <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-base leading-7 text-[#a7aaa7]">
-          Retrouvez toutes vos séances synchronisées avec Supabase : celles que vous avez créées et celles où vous êtes invité.
+          Retrouvez toutes vos séances enregistrées dans MongoDB : celles que vous avez créées et celles où vous êtes invité.
         </p>
         <button
           onClick={() => setOpen(true)}
@@ -660,7 +659,7 @@ export function WatchLanding() {
       {roomsLoading && (
         <div className="mt-10 flex items-center justify-center gap-3 py-10 text-sm text-[#a7aaa7]">
           <span className="size-4 animate-spin rounded-full border-2 border-[#d8ff45] border-t-transparent" />
-          Chargement de vos séances depuis Supabase…
+          Chargement de vos séances depuis MongoDB…
         </div>
       )}
 
@@ -912,23 +911,18 @@ export function WatchRoom({ initialRoom, isHost = false }: { initialRoom: Room; 
   }, [isHost, sendPlaybackCommand])
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`room-${room.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` },
-        (payload) => {
-          const next = payload.new as Room
-          setRoom(next)
-          setToast("Le lien de la vidéo a été modifié par l'hôte")
-          setTimeout(() => setToast(''), 3500)
-        }
-      )
-      .subscribe()
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [room.id])
+    if (!playbackState) return
+    const sharedVideoUrl = playbackState.source_url
+    if (sharedVideoUrl === room.video_url) return
+    setRoom(current => ({
+      ...current,
+      video_url: sharedVideoUrl,
+      video_provider: playbackState.provider,
+    }))
+    setToast("Le lien de la vidéo a été modifié par l'hôte")
+    const timeout = window.setTimeout(() => setToast(''), 3500)
+    return () => window.clearTimeout(timeout)
+  }, [playbackState, room.video_url])
 
   return (
     <Layout eyebrow="Salon en direct" title={room.title}>
@@ -978,7 +972,7 @@ export function WatchRoom({ initialRoom, isHost = false }: { initialRoom: Room; 
             <Link href="/watch" className="rounded-full bg-white/10 px-4 py-2 text-sm transition hover:bg-white/20">
               Quitter
             </Link>
-            <span className="text-xs text-[#a7aaa7]">Synchronisé en direct avec Supabase Realtime</span>
+            <span className="text-xs text-[#a7aaa7]">Présence des participants en direct</span>
           </div>
         </section>
         <aside className="rounded-2xl border border-white/10 bg-white/[.04] p-5">
