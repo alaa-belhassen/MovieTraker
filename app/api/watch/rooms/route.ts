@@ -16,7 +16,7 @@ export async function GET() {
       .select('id, title, video_url, video_provider, mode, rights_confirmed_at, created_at, updated_at, host_id, movie_id')
       .eq('host_id', user.id)
       .order('created_at', { ascending: false })
-
+      
     if (ownedError) {
       console.error('[CinéTrack] owned rooms query failed:', ownedError)
     }
@@ -124,7 +124,9 @@ export async function POST(request: NextRequest) {
     const videoUrl = (body.videoUrl || '').trim()
     const mode = body.mode === 'timer' ? 'timer' : 'video'
     const movieId = body.movieId ? Number(body.movieId) : null
-    const invitedUsernames: string[] = Array.isArray(body.invitedUsernames) ? body.invitedUsernames : []
+    const invitedUsernames = Array.isArray(body.invitedUsernames)
+      ? body.invitedUsernames.filter((name: unknown): name is string => typeof name === 'string').map((name: string) => name.trim()).filter(Boolean)
+      : []
 
     if (!title) {
       return NextResponse.json({ error: 'Donnez un titre à votre salon.' }, { status: 400 })
@@ -132,6 +134,9 @@ export async function POST(request: NextRequest) {
 
     if (mode === 'video' && (!videoUrl || !videoUrl.startsWith('https://'))) {
       return NextResponse.json({ error: 'Ajoutez un lien HTTPS valide.' }, { status: 400 })
+    }
+    if (invitedUsernames.length > 20 || invitedUsernames.some((name: string) => name.replace(/^@+/, '').length > 40)) {
+      return NextResponse.json({ error: 'Invitez au maximum 20 pseudos de 40 caractères chacun.' }, { status: 400 })
     }
 
     const roomId = crypto.randomUUID()
@@ -162,37 +167,21 @@ export async function POST(request: NextRequest) {
       console.warn('[CinéTrack] could not add host to room_participants:', e)
     }
 
-    // Invite users by username if provided
-    const addedParticipants: string[] = []
+    let addedParticipants: string[] = []
+    let missingParticipants: string[] = []
+    let invitationError: string | null = null
     if (invitedUsernames.length > 0) {
-      const cleanUsernames = invitedUsernames
-        .map((u) => u.replace(/^@/, '').trim().toLowerCase())
-        .filter(Boolean)
-
-      if (cleanUsernames.length > 0) {
-        const { data: matchedProfiles } = await supabase
-          .from('profiles')
-          .select('id, username')
-          .in('username', cleanUsernames)
-
-        if (matchedProfiles && matchedProfiles.length > 0) {
-          const participantInserts = matchedProfiles
-            .filter((p) => p.id !== user.id)
-            .map((p) => ({
-              room_id: roomId,
-              user_id: p.id,
-            }))
-
-          if (participantInserts.length > 0) {
-            const { error: pInsertError } = await supabase
-              .from('room_participants')
-              .upsert(participantInserts, { onConflict: 'room_id,user_id' })
-
-            if (!pInsertError) {
-              matchedProfiles.forEach((p) => addedParticipants.push(p.username))
-            }
-          }
-        }
+      const { data: inviteResults, error: inviteError } = await supabase.rpc('invite_room_participants', {
+        target_room_id: roomId,
+        target_usernames: invitedUsernames,
+      })
+      if (inviteError) {
+        console.error('[CinéTrack] room invitations failed:', inviteError)
+        invitationError = 'Le salon est créé, mais les invitations n’ont pas pu être envoyées.'
+      } else {
+        const results = (inviteResults ?? []) as Array<{ requested_username: string; invited_username: string | null }>
+        addedParticipants = results.flatMap((result) => result.invited_username ? [result.invited_username] : [])
+        missingParticipants = results.flatMap((result) => result.invited_username ? [] : [result.requested_username])
       }
     }
 
@@ -206,6 +195,8 @@ export async function POST(request: NextRequest) {
         participantCount: 1 + addedParticipants.length,
       },
       invitedUsers: addedParticipants,
+      notFoundUsers: missingParticipants,
+      invitationError,
     })
   } catch (error) {
     console.error('[CinéTrack] room creation unexpected error:', error)

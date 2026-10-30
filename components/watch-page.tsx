@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Copy, ExternalLink, MoreVertical, Play, Share2, Trash2, Users, X, Film, LogOut, Radio } from 'lucide-react'
 import {
-  createRoom,
   detectVideoProvider,
   extractVimeoId,
   extractYouTubeId,
@@ -76,6 +75,7 @@ function CreateRoom({
   const [created, setCreated] = useState<Room | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [invitationNotice, setInvitationNotice] = useState('')
 
   const submit = async () => {
     setError('')
@@ -93,36 +93,26 @@ function CreateRoom({
         .map((p) => p.trim())
         .filter(Boolean)
 
-      // Try via POST /api/watch/rooms first, fallback to client createRoom
-      let newRoom: any = null
-      try {
-        const response = await fetch('/api/watch/rooms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: title.trim(),
-            videoUrl: mode === 'video' ? url.trim() : '',
-            mode,
-            invitedUsernames: invitedList,
-          }),
-        })
-        if (response.ok) {
-          const payload = await response.json()
-          newRoom = payload.room
-        }
-      } catch {}
-
-      if (!newRoom) {
-        newRoom = await createRoom({
+      const response = await fetch('/api/watch/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           title: title.trim(),
           videoUrl: mode === 'video' ? url.trim() : '',
           mode,
           invitedUsernames: invitedList,
-        })
-      }
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Impossible de créer le salon.')
 
-      setCreated(newRoom)
-      if (onSuccess) onSuccess(newRoom)
+      setCreated(payload.room)
+      const notices = []
+      if (payload.invitationError) notices.push(payload.invitationError)
+      if (payload.invitedUsers?.length) notices.push(`Invités : ${payload.invitedUsers.join(', ')}.`)
+      if (payload.notFoundUsers?.length) notices.push(`Pseudos introuvables : ${payload.notFoundUsers.join(', ')}.`)
+      setInvitationNotice(notices.join(' '))
+      if (onSuccess) onSuccess(payload.room)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible de créer le salon.')
     } finally {
@@ -147,6 +137,7 @@ function CreateRoom({
               <p className="mt-1 text-sm text-[#a7aaa7]">
                 Enregistré dans Supabase. Partagez le lien avec vos amis pour qu’ils vous rejoignent.
               </p>
+              {invitationNotice && <p role="status" className="mt-3 text-sm text-[#d8ff45]">{invitationNotice}</p>}
             </div>
           </div>
           <div className="mt-6 flex gap-3 rounded-xl bg-black/30 p-3">
@@ -274,7 +265,7 @@ function CreateRoom({
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-[#d8ff45]"
             />
             <span className="mt-1 block text-xs text-[#a7aaa7]">
-              Les pseudos invités verront automatiquement ce salon dans leur section « Salons où je suis invité ».
+              Saisissez les pseudos de comptes CinéTrack, séparés par des virgules. Ils retrouveront le salon dans « Salons où je suis invité ».
             </span>
           </label>
 
@@ -431,6 +422,71 @@ function RoomCard({
         </div>
       </div>
     </article>
+  )
+}
+
+function InviteParticipants({ roomId }: { roomId: string }) {
+  const [usernames, setUsernames] = useState('')
+  const [message, setMessage] = useState('')
+  const [isError, setIsError] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const invite = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setMessage('')
+    setIsError(false)
+    const names = usernames.split(/[\s,]+/).map((name) => name.trim()).filter(Boolean)
+    if (names.length === 0) {
+      setMessage('Saisissez au moins un pseudo.')
+      setIsError(true)
+      return
+    }
+
+    setSending(true)
+    try {
+      const response = await fetch('/api/watch/rooms/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, usernames: names }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Impossible d’envoyer les invitations.')
+
+      const notices: string[] = []
+      if (result.invited?.length) notices.push(`Invités : ${result.invited.join(', ')}.`)
+      if (result.notFound?.length) notices.push(`Pseudos introuvables : ${result.notFound.join(', ')}.`)
+      setMessage(notices.join(' ') || 'Aucun nouvel utilisateur à inviter.')
+      setUsernames('')
+    } catch (error) {
+      setIsError(true)
+      setMessage(error instanceof Error ? error.message : 'Impossible d’envoyer les invitations.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={invite} className="mt-4 rounded-2xl border border-white/10 bg-white/[.04] p-4">
+      <label htmlFor="invite-usernames" className="block text-sm font-semibold">Inviter des utilisateurs</label>
+      <p className="mt-1 text-xs text-[#a7aaa7]">Pseudos CinéTrack séparés par des virgules. Les invités retrouveront ce salon dans leur liste.</p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          id="invite-usernames"
+          value={usernames}
+          onChange={(event) => setUsernames(event.target.value)}
+          placeholder="@camille, lucas"
+          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-[#d8ff45]"
+        />
+        <button
+          type="submit"
+          disabled={sending}
+          className="rounded-xl bg-[#d8ff45] px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
+        >
+          {sending ? 'Envoi…' : 'Inviter'}
+        </button>
+      </div>
+      {message && <p role={isError ? 'alert' : 'status'} className={`mt-3 text-sm ${isError ? 'text-red-300' : 'text-[#d8ff45]'}`}>{message}</p>}
+    </form>
   )
 }
 
@@ -905,9 +961,12 @@ export function WatchRoom({ initialRoom, isHost = false }: { initialRoom: Room; 
               ))}
             </div>
             {isHost && (
-              <p className="mt-3 text-xs text-[#a7aaa7]">
-                Vous êtes l’hôte du salon. Vous avez le contrôle complet de la lecture et du lien vidéo.
-              </p>
+              <>
+                <p className="mt-3 text-xs text-[#a7aaa7]">
+                  Vous êtes l’hôte du salon. Vous avez le contrôle complet de la lecture et du lien vidéo.
+                </p>
+                <InviteParticipants roomId={room.id} />
+              </>
             )}
           </div>
           {toast && (
