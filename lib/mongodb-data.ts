@@ -28,6 +28,20 @@ type ProfileDocument = Document & {
   is_moderator: boolean
 }
 
+type RoomParticipantDocument = Document & {
+  room_id: string
+  user_id: string
+}
+
+type RoomMessageDocument = Document & {
+  id: string
+  room_id: string
+  user_id: string
+  username: string
+  text: string
+  created_at: string
+}
+
 type RoomDocument = Document & {
   id: string
   host_id: string
@@ -105,6 +119,12 @@ export async function saveMovieEntry(userId: string, movieId: number, status: Mo
     },
     { upsert: true },
   )
+}
+
+export async function removeMovieEntry(userId: string, movieId: number, status: MovieDocument['status']) {
+  if (!Number.isInteger(movieId) || movieId < 1) throw new Error('Invalid movie ID.')
+  const database = await getMongoDatabase()
+  await database.collection<MovieDocument>('user_movies').deleteOne({ user_id: userId, movie_id: movieId, status })
 }
 
 export async function listFavoriteActors(userId: string) {
@@ -271,6 +291,48 @@ export async function joinMongoRoom(roomId: string, userId: string) {
   return room
 }
 
+export async function listMongoRoomMessages(roomId: string, userId: string) {
+  const room = await getMongoRoom(roomId, userId)
+  if (!room) throw new Error('ROOM_ACCESS_DENIED')
+
+  const database = await getMongoDatabase()
+  const messages = await database.collection<RoomMessageDocument>('room_messages')
+    .find(
+      { room_id: roomId },
+      { projection: { _id: 0, id: 1, username: 1, text: 1, created_at: 1 } },
+    )
+    .sort({ created_at: -1 })
+    .limit(100)
+    .toArray()
+
+  return messages.reverse()
+}
+
+export async function createMongoRoomMessage(roomId: string, userId: string, username: string, text: string) {
+  const cleanText = text.trim()
+  if (!cleanText || cleanText.length > 500) throw new Error('INVALID_ROOM_MESSAGE')
+
+  const room = await getMongoRoom(roomId, userId)
+  if (!room) throw new Error('ROOM_ACCESS_DENIED')
+
+  const message: RoomMessageDocument = {
+    id: randomUUID(),
+    room_id: roomId,
+    user_id: userId,
+    username,
+    text: cleanText,
+    created_at: new Date().toISOString(),
+  }
+  const database = await getMongoDatabase()
+  await database.collection<RoomMessageDocument>('room_messages').insertOne(message)
+  return {
+    id: message.id,
+    username: message.username,
+    text: message.text,
+    created_at: message.created_at,
+  }
+}
+
 export async function leaveOrDeleteMongoRoom(roomId: string, userId: string) {
   const database = await getMongoDatabase()
   const room = await database.collection<RoomDocument>('rooms').findOne({ id: roomId }, { projection: { host_id: 1 } })
@@ -279,6 +341,7 @@ export async function leaveOrDeleteMongoRoom(roomId: string, userId: string) {
       database.collection('rooms').deleteOne({ id: roomId, host_id: userId }),
       database.collection('room_participants').deleteMany({ room_id: roomId }),
       database.collection('room_playback_state').deleteOne({ room_id: roomId }),
+      database.collection('room_messages').deleteMany({ room_id: roomId }),
     ])
     return 'deleted' as const
   }
@@ -331,6 +394,29 @@ export async function inviteMongoRoomParticipants(roomId: string, usernames: str
     requested_username,
     invited_username: byName.get(requested_username.toLowerCase()) ?? null,
   }))
+}
+
+export async function listMongoRoomInviteCandidates(roomId: string, userId: string) {
+  const database = await getMongoDatabase()
+  const room = await database.collection<RoomDocument>('rooms').findOne(
+    { id: roomId, host_id: userId },
+    { projection: { id: 1 } },
+  )
+  if (!room) throw new Error('HOST_REQUIRED')
+
+  const participants = await database.collection<RoomParticipantDocument>('room_participants')
+    .find({ room_id: roomId }, { projection: { user_id: 1, _id: 0 } })
+    .toArray()
+  const participantIds = participants.map(participant => participant.user_id)
+  const profiles = await database.collection<ProfileDocument>('profiles')
+    .find(
+      { id: { $nin: [...participantIds, userId] } },
+      { projection: { _id: 0, id: 1, username: 1 } },
+    )
+    .sort({ username_normalized: 1 })
+    .toArray()
+
+  return profiles.map(profile => ({ id: profile.id, username: profile.username }))
 }
 
 export async function createMongoSharedList(name: string, user: User) {

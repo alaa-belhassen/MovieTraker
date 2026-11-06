@@ -28,6 +28,8 @@ export async function getMongoDatabase() {
         database.collection('shared_list_members').createIndex({ list_id: 1, user_id: 1 }, { unique: true }),
         database.collection('shared_list_votes').createIndex({ list_id: 1, movie_id: 1, user_id: 1 }, { unique: true }),
         database.collection('room_playback_state').createIndex({ room_id: 1 }, { unique: true }),
+        database.collection('room_messages').createIndex({ room_id: 1, created_at: -1 }),
+        database.collection('room_messages').createIndex({ id: 1 }, { unique: true }),
         database.collection('chat_history').createIndex({ owner_key: 1 }, { unique: true }),
         database.collection('chat_history').createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
       ])

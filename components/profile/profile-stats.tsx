@@ -42,7 +42,7 @@ export function ProfileStatsSection() {
       </div>
       <div className="rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">Historique récent</h2>
-        <div className="mt-4 flex flex-col gap-4">{data.recent.map((m) => <Link href={`/film/${m.id}`} key={m.id} className="flex items-center gap-3">{m.poster_path ? <img src={`https://image.tmdb.org/t/p/w185${m.poster_path}`} alt={`Affiche de ${m.title}`} className="size-12 rounded-lg object-cover" /> : <span className="size-12 rounded-lg bg-muted" aria-hidden />}<span className="min-w-0 flex-1 truncate text-sm">{m.title}</span><span className="text-xs text-muted-foreground">{m.date ? new Date(m.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span></Link>)}</div>
+        <div className="mt-4 flex flex-col gap-4">{data.recent.map((m) => <Link href={`/film/${m.id}`} key={m.id} className="flex items-center gap-3">{m.poster_path ? <img src={`https://image.tmdb.org/t/p/w185${m.poster_path}`} alt={`Affiche de ${m.title}`} className="size-12 rounded-lg object-cover" /> : <span className="size-12 rounded-lg bg-muted" aria-hidden />}<span className="min-w-0 flex-1 truncate text-sm">{m.title}</span><span className="text-xs text-muted-foreground">{m.date ? new Date(m.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : ''}</span></Link>)}</div>
       </div>
     </div>
   </>
