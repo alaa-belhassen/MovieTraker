@@ -1,6 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/api-auth'
-import { inviteMongoRoomParticipants } from '@/lib/mongodb-data'
+import { inviteMongoRoomParticipants, listMongoRoomInviteCandidates } from '@/lib/mongodb-data'
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await getAuthenticatedUser()
+    if (!user) return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 })
+
+    const roomId = request.nextUrl.searchParams.get('roomId')?.trim()
+    if (!roomId) return NextResponse.json({ error: 'Choisissez un salon valide.' }, { status: 400 })
+
+    try {
+      const users = await listMongoRoomInviteCandidates(roomId, user.id)
+      return NextResponse.json({ users })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'HOST_REQUIRED') {
+        return NextResponse.json({ error: 'Seul l’hôte peut inviter des participants.' }, { status: 403 })
+      }
+      throw error
+    }
+  } catch (error) {
+    console.error('[CinéTrack] room invite candidates query failed:', error)
+    return NextResponse.json({ error: 'Impossible de charger les utilisateurs disponibles.' }, { status: 500 })
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

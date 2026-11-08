@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/api-auth'
-import { listMovieEntries, saveMovieEntry } from '@/lib/mongodb-data'
+import { listMovieEntries, removeMovieEntry, saveMovieEntry } from '@/lib/mongodb-data'
 
 const STATUSES = new Set(['watchlist', 'watched', 'favorite'])
 
@@ -33,5 +33,23 @@ export async function POST(request: NextRequest) {
     console.error('[CinéTrack] movie entry save failed:', error)
     const message = error instanceof Error ? error.message : ''
     return NextResponse.json({ error: message === 'Invalid movie ID.' ? message : 'MOVIE_SAVE_FAILED' }, { status: message === 'Invalid movie ID.' ? 400 : 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const user = await getAuthenticatedUser()
+    if (!user) return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 })
+    const params = new URL(request.url).searchParams
+    const movieId = Number(params.get('movieId'))
+    const status = params.get('status')
+    if (!Number.isInteger(movieId) || movieId < 1 || typeof status !== 'string' || !STATUSES.has(status)) {
+      return NextResponse.json({ error: 'Invalid movie entry.' }, { status: 400 })
+    }
+    await removeMovieEntry(user.id, movieId, status as 'watchlist' | 'watched' | 'favorite')
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('[CinéTrack] movie entry removal failed:', error)
+    return NextResponse.json({ error: 'MOVIE_REMOVE_FAILED' }, { status: 500 })
   }
 }

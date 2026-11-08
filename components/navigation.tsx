@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Film, House, Search, Tags, Users, LogIn, LogOut, Share2, MessageSquare, PlayCircle, Heart } from 'lucide-react'
+import { Bookmark, Film, House, Search, Tags, Users, LogIn, LogOut, Share2, MessageSquare, PlayCircle, Heart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/auth-provider'
 
@@ -15,6 +15,7 @@ const publicItems = [
 ]
 
 const authenticatedItems = [
+  { href: '/mes-listes', label: 'Mes listes', icon: Bookmark },
   { href: '/acteurs-favoris', label: 'Suivis', icon: Heart },
   { href: '/listes-partagees', label: 'Listes partagées', icon: Share2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
@@ -24,10 +25,11 @@ const authenticatedItems = [
 export function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
   const [scrolled, setScrolled] = useState(false)
   const [query, setQuery] = useState('')
   const items = user ? [...publicItems, ...authenticatedItems] : publicItems
+  const profileInitials = (profile?.username ?? user?.email ?? 'Vous').slice(0, 2).toUpperCase()
 
   useEffect(() => { const onScroll = () => setScrolled(window.scrollY > 40); onScroll(); window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll) }, [])
   const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) router.push(`/search?q=${encodeURIComponent(query.trim())}`) }
@@ -35,12 +37,12 @@ export function Navigation() {
 
   return <>
     <header className={`sticky inset-x-0 top-0 z-40 border-b transition-colors duration-200 ${scrolled ? 'border-white/10 bg-[#080909]/90 backdrop-blur-xl' : 'border-white/10 bg-[#080909]/80 backdrop-blur-xl'}`}>
-      <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-4 px-5 sm:px-8">
+      <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center gap-x-4 px-5 sm:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2 rounded-lg font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45]"><Film className="text-[#d8ff45]" aria-hidden="true" />MovieTracker</Link>
-        <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="Navigation principale">{items.map(({ href, label, icon: Icon }) => { const active = isActive(href); return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] ${active ? 'font-semibold text-white' : 'text-white/55'}`}><Icon aria-hidden="true" />{label}{active && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-[#d8ff45] shadow-[0_0_12px_#d8ff45]" />}</Link> })}</nav>
-        <div className="ml-auto flex items-center gap-2"><form onSubmit={submit} className="hidden items-center rounded-full border border-white/10 bg-white/5 px-3 focus-within:border-[#d8ff45] sm:flex"><Search aria-hidden="true" /><label htmlFor="global-search" className="sr-only">Rechercher</label><input id="global-search" value={query} onChange={e => setQuery(e.target.value)} className="w-28 bg-transparent px-2 py-2 text-sm outline-none transition focus:w-44" placeholder="Rechercher" /></form>{user ? <button type="button" onClick={() => void signOut()} className="hidden items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-xs font-semibold transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] sm:flex"><LogOut aria-hidden="true" />Se déconnecter</button> : <Link href="/auth/login" className="hidden items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-xs font-semibold transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] sm:flex"><LogIn aria-hidden="true" />Se connecter</Link>}</div>
+        <div className="order-2 ml-auto flex shrink-0 items-center gap-2"><form onSubmit={submit} className="hidden items-center rounded-full border border-white/10 bg-white/5 px-3 focus-within:border-[#d8ff45] sm:flex"><Search aria-hidden="true" /><label htmlFor="global-search" className="sr-only">Rechercher</label><input id="global-search" value={query} onChange={e => setQuery(e.target.value)} className="w-28 bg-transparent px-2 py-2 text-sm outline-none transition focus:w-44" placeholder="Rechercher" /></form>{user ? <><Link href="/profil" aria-label={`Profil de ${profile?.username ?? 'mon compte'}`} aria-current={isActive('/profil') ? 'page' : undefined} className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-[#d8ff45] transition hover:border-[#d8ff45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45]">{profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="size-full object-cover" /> : profileInitials}</Link><button type="button" onClick={() => void signOut()} className="hidden items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-xs font-semibold transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] sm:flex"><LogOut aria-hidden="true" />Se déconnecter</button></> : <Link href="/auth/login" className="hidden items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-xs font-semibold transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] sm:flex"><LogIn aria-hidden="true" />Se connecter</Link>}</div>
+        <nav className="order-3 hidden basis-full flex-wrap justify-center gap-1 border-t border-white/10 py-2 md:flex" aria-label="Navigation principale">{items.map(({ href, label, icon: Icon }) => { const active = isActive(href); return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`relative flex items-center gap-2 rounded-lg px-2 py-2 text-xs lg:px-3 lg:text-sm transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d8ff45] ${active ? 'font-semibold text-white' : 'text-white/55'}`}><Icon aria-hidden="true" />{label}{active && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-[#d8ff45] shadow-[0_0_12px_#d8ff45]" />}</Link> })}</nav>
       </div>
     </header>
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-[#080909]/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Navigation mobile">{items.map(({ href, label, icon: Icon }) => { const active = isActive(href); return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 py-3 text-[10px] active:scale-95 ${active ? 'text-[#d8ff45]' : 'text-white/50'}`}><Icon aria-hidden="true" /><span>{label}</span>{active && <span className="absolute top-1 size-1 rounded-full bg-[#d8ff45]" />}</Link> })}</nav>
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/10 bg-[#080909]/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Navigation mobile">{items.map(({ href, label, icon: Icon }) => { const active = isActive(href); const mobileLabel = label === 'Listes partagées' ? 'Partagées' : label === 'Watch Together' ? 'Watch' : label; return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`relative flex min-w-0 flex-col items-center gap-1 px-1 py-2 text-[10px] leading-tight active:scale-95 ${active ? 'text-[#d8ff45]' : 'text-white/50'}`}><Icon aria-hidden="true" className="size-4" /><span className="whitespace-nowrap">{mobileLabel}</span>{active && <span className="absolute top-1 size-1 rounded-full bg-[#d8ff45]" />}</Link> })}</nav>
   </>
 }
