@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/api-auth'
-import { getMongoProfile } from '@/lib/mongodb-data'
+import { getMongoProfile, updateMongoUsername } from '@/lib/mongodb-data'
 
 export async function GET() {
   try {
@@ -16,6 +16,26 @@ export async function GET() {
     })
   } catch (error) {
     console.error('[CinéTrack] profile load failed:', error)
+    return NextResponse.json({ error: 'PROFILE_UNAVAILABLE' }, { status: 500 })
+  }
+}
+
+// U2 - Modification du pseudo. Seul le champ `username` est modifiable : is_moderator et avatar_url sont ignorés.
+export async function PATCH(request: Request) {
+  try {
+    const user = await getAuthenticatedUser()
+    if (!user) return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 })
+    const body = await request.json().catch(() => null) as { username?: unknown } | null
+    if (typeof body?.username !== 'string') return NextResponse.json({ error: 'INVALID_USERNAME' }, { status: 400 })
+    const result = await updateMongoUsername(user, body.username)
+    if (!result.ok) {
+      return result.reason === 'TAKEN'
+        ? NextResponse.json({ error: 'USERNAME_TAKEN' }, { status: 409 })
+        : NextResponse.json({ error: 'INVALID_USERNAME' }, { status: 400 })
+    }
+    return NextResponse.json({ username: result.username })
+  } catch (error) {
+    console.error('[CinéTrack] profile update failed:', error)
     return NextResponse.json({ error: 'PROFILE_UNAVAILABLE' }, { status: 500 })
   }
 }

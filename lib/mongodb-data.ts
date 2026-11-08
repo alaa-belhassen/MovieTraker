@@ -79,6 +79,29 @@ export async function ensureMongoProfile(user: User) {
   return database.collection<ProfileDocument>('profiles').findOne({ id: user.id })
 }
 
+export const USERNAME_PATTERN = /^[\p{L}\p{N}._-]{3,30}$/u
+
+export type UsernameUpdateResult = { ok: true; username: string } | { ok: false; reason: 'INVALID' | 'TAKEN' }
+
+// U2 - Modifier le pseudo public. Le pseudo est utilisé pour les invitations (séparées par espaces/virgules),
+// il ne peut donc contenir que lettres, chiffres, point, tiret et underscore.
+export async function updateMongoUsername(user: User, rawUsername: string): Promise<UsernameUpdateResult> {
+  const username = rawUsername.trim().replace(/^@+/, '')
+  if (!USERNAME_PATTERN.test(username)) return { ok: false, reason: 'INVALID' }
+  await ensureMongoProfile(user)
+  const database = await getMongoDatabase()
+  const profiles = database.collection<ProfileDocument>('profiles')
+  const normalized = username.toLowerCase()
+  const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const taken = await profiles.findOne({
+    id: { $ne: user.id },
+    $or: [{ username_normalized: normalized }, { username: { $regex: `^${escaped}$`, $options: 'i' } }],
+  })
+  if (taken) return { ok: false, reason: 'TAKEN' }
+  await profiles.updateOne({ id: user.id }, { $set: { username, username_normalized: normalized } })
+  return { ok: true, username }
+}
+
 export async function getMongoProfile(user: User) {
   return ensureMongoProfile(user)
 }
