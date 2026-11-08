@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function getAuthenticatedUser(): Promise<User | null> {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getUser()
+  if (error?.name === 'AuthSessionMissingError') return null
   if (error) throw error
   return data.user
 }

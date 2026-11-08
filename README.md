@@ -4,7 +4,7 @@
 
 Set `MONGODB_URI` to a MongoDB connection string and optionally set `MONGODB_DB` (defaults to `cinetrack`) in the local environment and deployment environment. MongoDB stores app profiles, movie entries, favorite actors, shared lists, watch rooms, playback state, reports, and chat history. Keep the URI server-side; do not prefix it with `NEXT_PUBLIC_`.
 
-Supabase remains the authentication provider and powers watch-room presence. Records already stored in Supabase or Upstash Redis are not copied automatically; export and import the data you need before switching a deployed app to MongoDB.
+Supabase remains the authentication provider and powers watch-room presence. MongoDB stores forum topics and replies alongside app profiles, movie entries, favorite actors, shared lists, watch rooms, playback state, reports, and chat history. Existing forum records in Supabase are not copied automatically; export and import them before switching a deployed app to MongoDB.
 
 ## PWA
 

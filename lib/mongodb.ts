@@ -30,6 +30,10 @@ export async function getMongoDatabase() {
         database.collection('room_playback_state').createIndex({ room_id: 1 }, { unique: true }),
         database.collection('room_messages').createIndex({ room_id: 1, created_at: -1 }),
         database.collection('room_messages').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_topics').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_topics').createIndex({ category: 1, created_at: -1 }),
+        database.collection('forum_replies').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_replies').createIndex({ topic_id: 1, created_at: 1 }),
         database.collection('chat_history').createIndex({ owner_key: 1 }, { unique: true }),
         database.collection('chat_history').createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
       ])
