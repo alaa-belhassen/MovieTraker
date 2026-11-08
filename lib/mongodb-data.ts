@@ -102,6 +102,66 @@ export async function updateMongoUsername(user: User, rawUsername: string): Prom
   return { ok: true, username }
 }
 
+export type AvatarUpdateResult = { ok: true; avatar_url: string | null } | { ok: false }
+
+// U2 - Photo de profil. L'URL doit pointer vers le dossier de l'utilisateur dans le bucket public `avatars`.
+export async function updateMongoAvatar(user: User, value: unknown): Promise<AvatarUpdateResult> {
+  let avatarUrl: string | null = null
+  if (value !== null) {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (typeof value !== 'string' || !base || value.length > 500) return { ok: false }
+    if (!value.startsWith(`${base}/storage/v1/object/public/avatars/${user.id}/`)) return { ok: false }
+    avatarUrl = value
+  }
+  await ensureMongoProfile(user)
+  const database = await getMongoDatabase()
+  await database.collection<ProfileDocument>('profiles').updateOne({ id: user.id }, { $set: { avatar_url: avatarUrl } })
+  return { ok: true, avatar_url: avatarUrl }
+}
+
+// U2 - Suppression de compte : efface toutes les données MongoDB liées à l'utilisateur.
+// L'opération est idempotente : on peut la relancer sans risque si la suppression du compte d'authentification échoue ensuite.
+export async function deleteMongoUserData(userId: string) {
+  const database = await getMongoDatabase()
+
+  // Salons créés par l'utilisateur (avec leurs participants et leur état de lecture)
+  const hostedRooms = await database.collection('rooms').find({ host_id: userId }, { projection: { id: 1 } }).toArray()
+  const roomIds = hostedRooms.map((room) => room.id as string)
+  if (roomIds.length > 0) {
+    await Promise.all([
+      database.collection('rooms').deleteMany({ id: { $in: roomIds } }),
+      database.collection('room_participants').deleteMany({ room_id: { $in: roomIds } }),
+      database.collection('room_playback_state').deleteMany({ room_id: { $in: roomIds } }),
+    ])
+  }
+
+  await Promise.all([
+    database.collection('user_movies').deleteMany({ user_id: userId }),
+    database.collection('favorite_actors').deleteMany({ user_id: userId }),
+    database.collection('room_participants').deleteMany({ user_id: userId }),
+    database.collection('shared_list_votes').deleteMany({ user_id: userId }),
+    database.collection('shared_list_members').deleteMany({ user_id: userId }),
+    // Les signalements sont conservés pour la modération, mais ne sont plus rattachés à la personne.
+    database.collection('content_reports').updateMany({ reporter_id: userId }, { $set: { reporter_id: null } }),
+    database.collection('chat_history').deleteOne({ owner_key: `cinetrack:chat:user:${userId}` }),
+  ])
+
+  // Listes partagées créées par l'utilisateur : supprimées seulement s'il n'y reste plus aucun autre membre.
+  const createdLists = await database.collection('shared_lists').find({ creator_id: userId }, { projection: { id: 1 } }).toArray()
+  for (const list of createdLists) {
+    const listId = list.id as string
+    const remaining = await database.collection('shared_list_members').countDocuments({ list_id: listId })
+    if (remaining === 0) {
+      await Promise.all([
+        database.collection('shared_lists').deleteOne({ id: listId }),
+        database.collection('shared_list_votes').deleteMany({ list_id: listId }),
+      ])
+    }
+  }
+
+  await database.collection('profiles').deleteOne({ id: userId })
+}
+
 export async function getMongoProfile(user: User) {
   return ensureMongoProfile(user)
 }
