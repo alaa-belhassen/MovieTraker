@@ -1,14 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Copy, ExternalLink, MoreVertical, Play, Share2, Trash2, Users, X, Film, LogOut, Radio } from 'lucide-react'
+import { ArrowLeft, Check, Copy, ExternalLink, MessageCircle, MoreVertical, Play, Search, Send, Share2, Trash2, Users, X, Film, LogOut, Radio } from 'lucide-react'
 import {
   detectVideoProvider,
   extractVimeoId,
   extractYouTubeId,
   getMyWatchRooms,
+  supabase,
   updateRoomVideo,
   validateVideoUrl,
   type WatchRoomSummary,
@@ -27,6 +28,9 @@ type Room = {
   mode: 'video' | 'timer'
   host_id?: string
 }
+
+type InviteCandidate = { id: string; username: string }
+type RoomChatMessage = { id: string; username: string; text: string; created_at: string }
 
 const poster = 'https://image.tmdb.org/t/p/w342/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg'
 
@@ -294,7 +298,7 @@ function RoomCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const isOwner = room.role === 'owner'
-  const roomUrl = `${typeof location !== 'undefined' ? location.origin : ''}/watch/${room.id}`
+  const getRoomUrl = () => `${window.location.origin}/watch/${room.id}`
 
   const providerLabel =
     room.mode === 'timer'
@@ -309,6 +313,7 @@ function RoomCard({
 
   const formattedDate = room.scheduled_at
     ? new Date(room.scheduled_at).toLocaleDateString('fr-FR', {
+        timeZone: 'UTC',
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
@@ -365,7 +370,7 @@ function RoomCard({
         <div className="relative flex gap-2">
           <button
             onClick={async () => {
-              if (await copyText(roomUrl)) onNotice('Lien du salon copié dans le presse-papier !')
+              if (await copyText(getRoomUrl())) onNotice('Lien du salon copié dans le presse-papier !')
             }}
             aria-label={`Partager ${room.title}`}
             title="Copier le lien"
@@ -392,7 +397,7 @@ function RoomCard({
                 role="menuitem"
                 onClick={async () => {
                   setMenuOpen(false)
-                  if (await copyText(roomUrl)) onNotice('Lien copié !')
+                  if (await copyText(getRoomUrl())) onNotice('Lien copié !')
                 }}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition hover:bg-white/10"
               >
@@ -426,9 +431,76 @@ function RoomCard({
 
 function InviteParticipants({ roomId }: { roomId: string }) {
   const [usernames, setUsernames] = useState('')
+  const [candidates, setCandidates] = useState<InviteCandidate[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [usersError, setUsersError] = useState('')
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
   const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadCandidates() {
+      setLoadingUsers(true)
+      setUsersError('')
+      try {
+        const response = await fetch(`/api/watch/rooms/invite?roomId=${encodeURIComponent(roomId)}`, {
+          signal: controller.signal,
+        })
+        const result = await response.json() as { users?: unknown; error?: unknown }
+        if (!response.ok) {
+          throw new Error(typeof result.error === 'string' ? result.error : 'Impossible de charger les utilisateurs.')
+        }
+        if (!Array.isArray(result.users)) throw new Error('La liste des utilisateurs est invalide.')
+        setCandidates(result.users.filter((candidate): candidate is InviteCandidate =>
+          typeof candidate === 'object' &&
+          candidate !== null &&
+          'id' in candidate &&
+          typeof candidate.id === 'string' &&
+          'username' in candidate &&
+          typeof candidate.username === 'string',
+        ))
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setUsersError(error instanceof Error ? error.message : 'Impossible de charger les utilisateurs.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoadingUsers(false)
+      }
+    }
+
+    void loadCandidates()
+    return () => controller.abort()
+  }, [roomId])
+
+  const currentUsername = usernames.split(',').pop()?.trim().replace(/^@+/, '') ?? ''
+  const existingUsernames = usernames
+    .split(',')
+    .slice(0, -1)
+    .map((name) => name.trim().replace(/^@+/, '').toLocaleLowerCase('fr'))
+    .filter(Boolean)
+  const filteredCandidates = currentUsername
+    ? candidates.filter((candidate) =>
+        candidate.username.toLocaleLowerCase('fr').includes(currentUsername.toLocaleLowerCase('fr')) &&
+        !existingUsernames.includes(candidate.username.toLocaleLowerCase('fr')),
+      )
+    : []
+
+  const addCandidate = (candidate: InviteCandidate) => {
+    const names = usernames.split(',').map((name) => name.replace(/^@+/, '').trim()).filter(Boolean)
+    if (names.slice(0, -1).some((name) => name.toLocaleLowerCase('fr') === candidate.username.toLocaleLowerCase('fr'))) return
+    if (names.length >= 20) {
+      setIsError(true)
+      setMessage('Vous pouvez inviter au maximum 20 personnes à la fois.')
+      return
+    }
+    setMessage('')
+    setIsError(false)
+    const lastCommaIndex = usernames.lastIndexOf(',')
+    const completedUsernames = lastCommaIndex >= 0 ? `${usernames.slice(0, lastCommaIndex + 1)} ` : ''
+    setUsernames(`${completedUsernames}${candidate.username}, `)
+  }
 
   const invite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -437,6 +509,11 @@ function InviteParticipants({ roomId }: { roomId: string }) {
     const names = usernames.split(/[\s,]+/).map((name) => name.trim()).filter(Boolean)
     if (names.length === 0) {
       setMessage('Saisissez au moins un pseudo.')
+      setIsError(true)
+      return
+    }
+    if (names.length > 20) {
+      setMessage('Vous pouvez inviter au maximum 20 personnes à la fois.')
       setIsError(true)
       return
     }
@@ -455,6 +532,12 @@ function InviteParticipants({ roomId }: { roomId: string }) {
       if (result.invited?.length) notices.push(`Invités : ${result.invited.join(', ')}.`)
       if (result.notFound?.length) notices.push(`Pseudos introuvables : ${result.notFound.join(', ')}.`)
       setMessage(notices.join(' ') || 'Aucun nouvel utilisateur à inviter.')
+      const invitedNames = new Set(
+        (Array.isArray(result.invited) ? result.invited : [])
+          .filter((name: unknown): name is string => typeof name === 'string')
+          .map((name: string) => name.toLocaleLowerCase('fr')),
+      )
+      setCandidates((available) => available.filter((candidate) => !invitedNames.has(candidate.username.toLocaleLowerCase('fr'))))
       setUsernames('')
     } catch (error) {
       setIsError(true)
@@ -484,8 +567,206 @@ function InviteParticipants({ roomId }: { roomId: string }) {
           {sending ? 'Envoi…' : 'Inviter'}
         </button>
       </div>
+      {currentUsername && (
+        <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10" aria-live="polite">
+          {loadingUsers ? (
+            <p className="p-3 text-sm text-[#a7aaa7]">Chargement des utilisateurs…</p>
+          ) : usersError ? (
+            <p role="alert" className="p-3 text-sm text-red-300">{usersError}</p>
+          ) : filteredCandidates.length ? (
+            filteredCandidates.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                onClick={() => addCandidate(candidate)}
+                className="block w-full border-b border-white/5 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-white/5"
+              >
+                {candidate.username}
+              </button>
+            ))
+          ) : (
+            <p className="p-3 text-sm text-[#a7aaa7]">
+              {candidates.length ? 'Aucun utilisateur ne correspond à cette saisie.' : 'Aucun utilisateur disponible à inviter.'}
+            </p>
+          )}
+        </div>
+      )}
+      {usersError && !currentUsername && <p role="alert" className="mt-3 text-sm text-red-300">{usersError}</p>}
       {message && <p role={isError ? 'alert' : 'status'} className={`mt-3 text-sm ${isError ? 'text-red-300' : 'text-[#d8ff45]'}`}>{message}</p>}
     </form>
+  )
+}
+
+function mergeRoomChatMessages(current: RoomChatMessage[], incoming: RoomChatMessage[]) {
+  const messages = new Map(current.map((message) => [message.id, message]))
+  for (const message of incoming) messages.set(message.id, message)
+  return [...messages.values()]
+    .sort((left, right) => left.created_at.localeCompare(right.created_at))
+    .slice(-100)
+}
+
+function RoomChat({ roomId }: { roomId: string }) {
+  const [messages, setMessages] = useState<RoomChatMessage[]>([])
+  const [messageText, setMessageText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+
+  const loadMessages = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const response = await fetch(`/api/watch/rooms/chat?roomId=${encodeURIComponent(roomId)}`, { signal })
+      const result = await response.json() as { messages?: unknown; error?: unknown }
+      if (!response.ok) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Impossible de charger les messages.')
+      }
+      if (!Array.isArray(result.messages)) throw new Error('La liste des messages est invalide.')
+      const loaded = result.messages.filter((message): message is RoomChatMessage =>
+        typeof message === 'object' &&
+        message !== null &&
+        'id' in message && typeof message.id === 'string' &&
+        'username' in message && typeof message.username === 'string' &&
+        'text' in message && typeof message.text === 'string' &&
+        'created_at' in message && typeof message.created_at === 'string',
+      )
+      setMessages((current) => mergeRoomChatMessages(current, loaded))
+      setError('')
+    } catch (loadError) {
+      if (!signal?.aborted) {
+        setError(loadError instanceof Error ? loadError.message : 'Impossible de charger les messages.')
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false)
+    }
+  }, [roomId])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const channel = supabase
+      .channel(`room-chat-${roomId}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'message' }, () => { void loadMessages(controller.signal) })
+      .subscribe()
+    channelRef.current = channel
+    void loadMessages(controller.signal)
+    const refreshInterval = window.setInterval(() => { void loadMessages(controller.signal) }, 10000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(refreshInterval)
+      if (channelRef.current === channel) channelRef.current = null
+      void supabase.removeChannel(channel)
+    }
+  }, [loadMessages, roomId])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (container) container.scrollTop = container.scrollHeight
+  }, [messages])
+
+  const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const text = messageText.trim()
+    if (!text || sending) return
+
+    setSending(true)
+    setError('')
+    try {
+      const response = await fetch('/api/watch/rooms/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, text }),
+      })
+      const result = await response.json() as { message?: unknown; error?: unknown }
+      if (!response.ok) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Impossible d’envoyer le message.')
+      }
+      const message = result.message
+      if (
+        typeof message !== 'object' || message === null ||
+        !('id' in message) || typeof message.id !== 'string' ||
+        !('username' in message) || typeof message.username !== 'string' ||
+        !('text' in message) || typeof message.text !== 'string' ||
+        !('created_at' in message) || typeof message.created_at !== 'string'
+      ) {
+        throw new Error('La réponse du chat est invalide.')
+      }
+
+      const savedMessage: RoomChatMessage = {
+        id: message.id,
+        username: message.username,
+        text: message.text,
+        created_at: message.created_at,
+      }
+      setMessages((current) => mergeRoomChatMessages(current, [savedMessage]))
+      setMessageText('')
+      try {
+        if (channelRef.current) {
+          const status = await channelRef.current.send({
+            type: 'broadcast',
+            event: 'message',
+            payload: {},
+          })
+          if (status !== 'ok') console.error('[CinéTrack] room chat realtime notification failed:', status)
+        }
+      } catch (broadcastError) {
+        console.error('[CinéTrack] room chat realtime notification failed:', broadcastError)
+      }
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : 'Impossible d’envoyer le message.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <section className="mt-6 border-t border-white/10 pt-5" aria-labelledby="room-chat-title">
+      <h3 id="room-chat-title" className="flex items-center gap-2 font-semibold">
+        <MessageCircle size={18} aria-hidden="true" />
+        Chat du salon
+      </h3>
+      <div ref={messagesContainerRef} className="mt-3 h-64 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3" aria-live="polite" aria-relevant="additions">
+        {loading && messages.length === 0 ? (
+          <p className="text-sm text-[#a7aaa7]">Chargement des messages…</p>
+        ) : messages.length ? (
+          <div className="space-y-3">
+            {messages.map((message) => (
+              <article key={message.id} className="text-sm">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-semibold text-[#d8ff45]">{message.username}</span>
+                  <time className="shrink-0 text-[10px] text-[#a7aaa7]" dateTime={message.created_at}>
+                    {new Date(message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </time>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap break-words text-[#f2f0eb]">{message.text}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#a7aaa7]">Aucun message. Lancez la conversation !</p>
+        )}
+      </div>
+      {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
+      <form onSubmit={sendMessage} className="mt-3 flex gap-2">
+        <label htmlFor="room-chat-message" className="sr-only">Votre message</label>
+        <input
+          id="room-chat-message"
+          value={messageText}
+          onChange={(event) => setMessageText(event.target.value)}
+          maxLength={500}
+          placeholder="Écrire un message…"
+          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-[#d8ff45]"
+        />
+        <button
+          type="submit"
+          disabled={sending || !messageText.trim()}
+          aria-label="Envoyer le message"
+          className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8ff45] text-black disabled:opacity-50"
+        >
+          <Send size={16} aria-hidden="true" />
+        </button>
+      </form>
+    </section>
   )
 }
 
@@ -731,7 +1012,7 @@ export function WatchLanding() {
           Rejoindre une séance existante
         </label>
         <p className="mt-1 text-xs text-[#a7aaa7]">
-          Collez le lien complet (ex: {typeof location !== 'undefined' ? location.origin : ''}/watch/...) ou l’identifiant du salon.
+          Collez le lien complet du salon ou son identifiant.
         </p>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row">
           <input
@@ -980,8 +1261,9 @@ export function WatchRoom({ initialRoom, isHost = false }: { initialRoom: Room; 
             <Users size={18} /> Participants
           </div>
           <p className="mt-4 text-sm text-[#a7aaa7]">
-            Le salon et son état de lecture sont synchronisés automatiquement pour tous les membres connectés.
+            Discutez en direct avec les membres connectés à ce salon.
           </p>
+          <RoomChat roomId={room.id} />
         </aside>
       </div>
     </Layout>

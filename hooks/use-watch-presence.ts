@@ -12,12 +12,16 @@ export function useWatchPresence(roomId: string, user: { id: string } | null, us
     if (!user) return
     const channel = supabase.channel(`presence-${roomId}`, { config: { presence: { key: user.id } } })
     const sync = () => {
-      const next = Object.values(channel.presenceState<{ userId: string; username: string; isHost: boolean }>()).flat().map((presence) => ({
-        key: presence.userId,
-        userId: presence.userId,
-        username: presence.username || 'Utilisateur',
-        isHost: presence.isHost,
-      }))
+      const byUserId = new Map<string, Participant>()
+      for (const presence of Object.values(channel.presenceState<{ userId: string; username: string; isHost: boolean }>()).flat()) {
+        byUserId.set(presence.userId, {
+          key: presence.userId,
+          userId: presence.userId,
+          username: presence.username || 'Utilisateur',
+          isHost: presence.isHost,
+        })
+      }
+      const next = [...byUserId.values()]
       setParticipants(next)
     }
     channel.on('presence', { event: 'sync' }, sync).on('presence', { event: 'join' }, sync).on('presence', { event: 'leave' }, sync)

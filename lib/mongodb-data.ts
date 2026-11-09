@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Document } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
 import { detectVideoProvider, validateVideoUrl, type VideoProvider } from '@/lib/video-provider'
+import { isForumCategory, type ForumCategory } from '@/lib/forum-types'
 
 type WatchRoomSummary = {
   id: string
@@ -28,6 +29,20 @@ type ProfileDocument = Document & {
   is_moderator: boolean
 }
 
+type RoomParticipantDocument = Document & {
+  room_id: string
+  user_id: string
+}
+
+type RoomMessageDocument = Document & {
+  id: string
+  room_id: string
+  user_id: string
+  username: string
+  text: string
+  created_at: string
+}
+
 type RoomDocument = Document & {
   id: string
   host_id: string
@@ -48,6 +63,27 @@ type MovieDocument = Document & {
   rating?: number | null
   comment?: string | null
   created_at: string
+}
+
+type ForumTopicDocument = Document & {
+  id: string
+  title: string
+  content: string
+  category: ForumCategory
+  author_id: string
+  author_username: string
+  created_at: string
+  updated_at?: string
+}
+
+type ForumReplyDocument = Document & {
+  id: string
+  topic_id: string
+  content: string
+  author_id: string
+  author_username: string
+  created_at: string
+  updated_at?: string
 }
 
 function getUsername(user: User) {
@@ -188,6 +224,12 @@ export async function saveMovieEntry(userId: string, movieId: number, status: Mo
     },
     { upsert: true },
   )
+}
+
+export async function removeMovieEntry(userId: string, movieId: number, status: MovieDocument['status']) {
+  if (!Number.isInteger(movieId) || movieId < 1) throw new Error('Invalid movie ID.')
+  const database = await getMongoDatabase()
+  await database.collection<MovieDocument>('user_movies').deleteOne({ user_id: userId, movie_id: movieId, status })
 }
 
 export async function listFavoriteActors(userId: string) {
@@ -354,6 +396,48 @@ export async function joinMongoRoom(roomId: string, userId: string) {
   return room
 }
 
+export async function listMongoRoomMessages(roomId: string, userId: string) {
+  const room = await getMongoRoom(roomId, userId)
+  if (!room) throw new Error('ROOM_ACCESS_DENIED')
+
+  const database = await getMongoDatabase()
+  const messages = await database.collection<RoomMessageDocument>('room_messages')
+    .find(
+      { room_id: roomId },
+      { projection: { _id: 0, id: 1, username: 1, text: 1, created_at: 1 } },
+    )
+    .sort({ created_at: -1 })
+    .limit(100)
+    .toArray()
+
+  return messages.reverse()
+}
+
+export async function createMongoRoomMessage(roomId: string, userId: string, username: string, text: string) {
+  const cleanText = text.trim()
+  if (!cleanText || cleanText.length > 500) throw new Error('INVALID_ROOM_MESSAGE')
+
+  const room = await getMongoRoom(roomId, userId)
+  if (!room) throw new Error('ROOM_ACCESS_DENIED')
+
+  const message: RoomMessageDocument = {
+    id: randomUUID(),
+    room_id: roomId,
+    user_id: userId,
+    username,
+    text: cleanText,
+    created_at: new Date().toISOString(),
+  }
+  const database = await getMongoDatabase()
+  await database.collection<RoomMessageDocument>('room_messages').insertOne(message)
+  return {
+    id: message.id,
+    username: message.username,
+    text: message.text,
+    created_at: message.created_at,
+  }
+}
+
 export async function leaveOrDeleteMongoRoom(roomId: string, userId: string) {
   const database = await getMongoDatabase()
   const room = await database.collection<RoomDocument>('rooms').findOne({ id: roomId }, { projection: { host_id: 1 } })
@@ -362,6 +446,7 @@ export async function leaveOrDeleteMongoRoom(roomId: string, userId: string) {
       database.collection('rooms').deleteOne({ id: roomId, host_id: userId }),
       database.collection('room_participants').deleteMany({ room_id: roomId }),
       database.collection('room_playback_state').deleteOne({ room_id: roomId }),
+      database.collection('room_messages').deleteMany({ room_id: roomId }),
     ])
     return 'deleted' as const
   }
@@ -414,6 +499,29 @@ export async function inviteMongoRoomParticipants(roomId: string, usernames: str
     requested_username,
     invited_username: byName.get(requested_username.toLowerCase()) ?? null,
   }))
+}
+
+export async function listMongoRoomInviteCandidates(roomId: string, userId: string) {
+  const database = await getMongoDatabase()
+  const room = await database.collection<RoomDocument>('rooms').findOne(
+    { id: roomId, host_id: userId },
+    { projection: { id: 1 } },
+  )
+  if (!room) throw new Error('HOST_REQUIRED')
+
+  const participants = await database.collection<RoomParticipantDocument>('room_participants')
+    .find({ room_id: roomId }, { projection: { user_id: 1, _id: 0 } })
+    .toArray()
+  const participantIds = participants.map(participant => participant.user_id)
+  const profiles = await database.collection<ProfileDocument>('profiles')
+    .find(
+      { id: { $nin: [...participantIds, userId] } },
+      { projection: { _id: 0, id: 1, username: 1 } },
+    )
+    .sort({ username_normalized: 1 })
+    .toArray()
+
+  return profiles.map(profile => ({ id: profile.id, username: profile.username }))
 }
 
 export async function createMongoSharedList(name: string, user: User) {
@@ -469,6 +577,159 @@ export async function voteMongoSharedList(listId: string, movieId: number, userI
     { $setOnInsert: { list_id: listId, movie_id: movieId, user_id: userId, created_at: new Date().toISOString() } },
     { upsert: true },
   )
+}
+
+export async function listMongoForumTopics(category?: ForumCategory) {
+  const database = await getMongoDatabase()
+  const filter = category ? { category } : {}
+  const topics = await database.collection<ForumTopicDocument>('forum_topics')
+    .find(filter, { projection: { _id: 0 } })
+    .sort({ created_at: -1 })
+    .toArray()
+  if (!topics.length) return []
+
+  const counts = await database.collection<ForumReplyDocument>('forum_replies').aggregate<{ _id: string; count: number }>([
+    { $match: { topic_id: { $in: topics.map(topic => topic.id) } } },
+    { $group: { _id: '$topic_id', count: { $sum: 1 } } },
+  ]).toArray()
+  const replyCounts = new Map(counts.map(row => [row._id, row.count]))
+  return topics.map(topic => ({ ...topic, reply_count: replyCounts.get(topic.id) ?? 0 }))
+}
+
+export async function getMongoForumTopic(topicId: string) {
+  const database = await getMongoDatabase()
+  const topic = await database.collection<ForumTopicDocument>('forum_topics').findOne(
+    { id: topicId },
+    { projection: { _id: 0 } },
+  )
+  if (!topic) return null
+  const replies = await database.collection<ForumReplyDocument>('forum_replies')
+    .find({ topic_id: topicId }, { projection: { _id: 0 } })
+    .sort({ created_at: -1 })
+    .limit(300)
+    .toArray()
+  return { ...topic, replies: replies.reverse() }
+}
+
+function validateForumTopic(title: string, content: string, category: unknown): asserts category is ForumCategory {
+  if (!title.trim() || title.trim().length > 120) throw new Error('Le titre doit contenir entre 1 et 120 caractères.')
+  if (!content.trim() || content.trim().length > 5000) throw new Error('Le message doit contenir entre 1 et 5000 caractères.')
+  if (!isForumCategory(category)) throw new Error('Catégorie de discussion invalide.')
+}
+
+async function canManageForumContent(userId: string, authorId: string) {
+  if (userId === authorId) return true
+  const database = await getMongoDatabase()
+  return Boolean(await database.collection<ProfileDocument>('profiles').findOne(
+    { id: userId, is_moderator: true },
+    { projection: { _id: 1 } },
+  ))
+}
+
+export async function createMongoForumTopic(user: User, input: { title: string; content: string; category: unknown }) {
+  validateForumTopic(input.title, input.content, input.category)
+  const profile = await ensureMongoProfile(user)
+  if (!profile) throw new Error('PROFILE_UNAVAILABLE')
+  const topic: ForumTopicDocument = {
+    id: randomUUID(),
+    title: input.title.trim(),
+    content: input.content.trim(),
+    category: input.category,
+    author_id: user.id,
+    author_username: profile.username,
+    created_at: new Date().toISOString(),
+  }
+  const database = await getMongoDatabase()
+  await database.collection<ForumTopicDocument>('forum_topics').insertOne(topic)
+  return {
+    id: topic.id,
+    title: topic.title,
+    content: topic.content,
+    category: topic.category,
+    author_id: topic.author_id,
+    author_username: topic.author_username,
+    created_at: topic.created_at,
+    reply_count: 0,
+  }
+}
+
+export async function updateMongoForumTopic(topicId: string, userId: string, input: { title: string; content: string; category: unknown }) {
+  validateForumTopic(input.title, input.content, input.category)
+  const database = await getMongoDatabase()
+  const topics = database.collection<ForumTopicDocument>('forum_topics')
+  const topic = await topics.findOne({ id: topicId }, { projection: { _id: 0 } })
+  if (!topic) throw new Error('FORUM_TOPIC_NOT_FOUND')
+  if (!await canManageForumContent(userId, topic.author_id)) throw new Error('FORUM_FORBIDDEN')
+  const updated = {
+    title: input.title.trim(),
+    content: input.content.trim(),
+    category: input.category,
+    updated_at: new Date().toISOString(),
+  }
+  await topics.updateOne({ id: topicId }, { $set: updated })
+  return { ...topic, ...updated }
+}
+
+export async function deleteMongoForumTopic(topicId: string, userId: string) {
+  const database = await getMongoDatabase()
+  const topics = database.collection<ForumTopicDocument>('forum_topics')
+  const topic = await topics.findOne({ id: topicId }, { projection: { author_id: 1 } })
+  if (!topic) throw new Error('FORUM_TOPIC_NOT_FOUND')
+  if (!await canManageForumContent(userId, topic.author_id)) throw new Error('FORUM_FORBIDDEN')
+  await Promise.all([
+    topics.deleteOne({ id: topicId }),
+    database.collection<ForumReplyDocument>('forum_replies').deleteMany({ topic_id: topicId }),
+  ])
+}
+
+export async function createMongoForumReply(topicId: string, user: User, content: string) {
+  const cleanContent = content.trim()
+  if (!cleanContent || cleanContent.length > 2000) throw new Error('La réponse doit contenir entre 1 et 2000 caractères.')
+  const database = await getMongoDatabase()
+  if (!await database.collection<ForumTopicDocument>('forum_topics').findOne({ id: topicId }, { projection: { id: 1 } })) {
+    throw new Error('FORUM_TOPIC_NOT_FOUND')
+  }
+  const profile = await ensureMongoProfile(user)
+  if (!profile) throw new Error('PROFILE_UNAVAILABLE')
+  const reply: ForumReplyDocument = {
+    id: randomUUID(),
+    topic_id: topicId,
+    content: cleanContent,
+    author_id: user.id,
+    author_username: profile.username,
+    created_at: new Date().toISOString(),
+  }
+  await database.collection<ForumReplyDocument>('forum_replies').insertOne(reply)
+  return {
+    id: reply.id,
+    topic_id: reply.topic_id,
+    content: reply.content,
+    author_id: reply.author_id,
+    author_username: reply.author_username,
+    created_at: reply.created_at,
+  }
+}
+
+export async function updateMongoForumReply(replyId: string, userId: string, content: string) {
+  const cleanContent = content.trim()
+  if (!cleanContent || cleanContent.length > 2000) throw new Error('La réponse doit contenir entre 1 et 2000 caractères.')
+  const database = await getMongoDatabase()
+  const replies = database.collection<ForumReplyDocument>('forum_replies')
+  const reply = await replies.findOne({ id: replyId }, { projection: { _id: 0 } })
+  if (!reply) throw new Error('FORUM_REPLY_NOT_FOUND')
+  if (!await canManageForumContent(userId, reply.author_id)) throw new Error('FORUM_FORBIDDEN')
+  const updated = { content: cleanContent, updated_at: new Date().toISOString() }
+  await replies.updateOne({ id: replyId }, { $set: updated })
+  return { ...reply, ...updated }
+}
+
+export async function deleteMongoForumReply(replyId: string, userId: string) {
+  const database = await getMongoDatabase()
+  const replies = database.collection<ForumReplyDocument>('forum_replies')
+  const reply = await replies.findOne({ id: replyId }, { projection: { author_id: 1 } })
+  if (!reply) throw new Error('FORUM_REPLY_NOT_FOUND')
+  if (!await canManageForumContent(userId, reply.author_id)) throw new Error('FORUM_FORBIDDEN')
+  await replies.deleteOne({ id: replyId })
 }
 
 export async function submitMongoReport(userId: string, targetType: 'topic' | 'message', targetId: string, reason: string) {
