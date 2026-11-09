@@ -5,7 +5,9 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
-  const next = url.searchParams.get('next') ?? '/profil'
+  const rawNext = url.searchParams.get('next') ?? '/profil'
+  // On n'accepte que des chemins internes (évite une redirection vers un site externe).
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\') ? rawNext : '/profil'
   if (code) {
     const cookieStore = await cookies()
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
