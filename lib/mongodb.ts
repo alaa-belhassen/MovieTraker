@@ -20,6 +20,7 @@ export async function getMongoDatabase() {
       await Promise.all([
         database.collection('profiles').createIndex({ id: 1 }, { unique: true }),
         database.collection('user_movies').createIndex({ user_id: 1, movie_id: 1, status: 1 }, { unique: true }),
+        database.collection('reviews').createIndex({ tmdb_movie_id: 1, user_id: 1 }, { unique: true }),
         database.collection('favorite_actors').createIndex({ user_id: 1, actor_id: 1 }, { unique: true }),
         database.collection('rooms').createIndex({ id: 1 }, { unique: true }),
         database.collection('room_participants').createIndex({ room_id: 1, user_id: 1 }, { unique: true }),
