@@ -138,7 +138,7 @@ function CreateRoom({
             <div>
               <h2 className="text-2xl font-semibold">Votre salon est prêt !</h2>
               <p className="mt-1 text-sm text-[#a7aaa7]">
-                Enregistré dans MongoDB. Partagez le lien avec vos amis pour qu’ils vous rejoignent.
+                Enregistré . Partagez le lien avec vos amis pour qu’ils vous rejoignent.
               </p>
               {invitationNotice && <p role="status" className="mt-3 text-sm text-[#d8ff45]">{invitationNotice}</p>}
             </div>
@@ -279,7 +279,7 @@ function CreateRoom({
             onClick={submit}
             className="rounded-xl bg-[#d8ff45] py-3 font-semibold text-black transition hover:brightness-105 disabled:opacity-60"
           >
-            {saving ? 'Création et enregistrement dans MongoDB…' : 'Créer le salon'}
+            {saving ? 'Création et enregistrement ...' : 'Créer le salon'}
           </button>
         </div>
       </div>
@@ -778,7 +778,7 @@ function EmptySalons({ onCreate }: { onCreate: () => void }) {
       </div>
       <h2 className="mt-5 text-xl font-semibold">Aucun salon pour le moment</h2>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#a7aaa7]">
-        Créez un salon dans MongoDB et invitez vos proches à partager votre prochaine séance cinéma en direct.
+        Créez un salon et invitez vos proches à partager votre prochaine séance cinéma en direct.
       </p>
       <button
         onClick={onCreate}
@@ -881,7 +881,7 @@ export function WatchLanding() {
     <Layout eyebrow="Watch Together" title="Mes séances en direct">
       <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-base leading-7 text-[#a7aaa7]">
-          Retrouvez toutes vos séances enregistrées dans MongoDB : celles que vous avez créées et celles où vous êtes invité.
+          Retrouvez toutes vos séances enregistrées : celles que vous avez créées et celles où vous êtes invité.
         </p>
         <button
           onClick={() => setOpen(true)}
@@ -940,7 +940,7 @@ export function WatchLanding() {
       {roomsLoading && (
         <div className="mt-10 flex items-center justify-center gap-3 py-10 text-sm text-[#a7aaa7]">
           <span className="size-4 animate-spin rounded-full border-2 border-[#d8ff45] border-t-transparent" />
-          Chargement de vos séances depuis MongoDB…
+          Chargement de vos séances ...
         </div>
       )}
 
