@@ -2,10 +2,22 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Film, House, Search, Tags, Users, LogIn, LogOut, Share2, MessageSquare, PlayCircle } from 'lucide-react'
+import {
+  Film,
+  House,
+  Search,
+  Tags,
+  Users,
+  LogIn,
+  LogOut,
+  Share2,
+  MessageSquare,
+  PlayCircle,
+  Bookmark,
+  Sparkles,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/auth-provider'
-
 const publicItems = [
   { href: '/', label: 'Accueil', icon: House },
   { href: '/movies', label: 'Films', icon: Film },
@@ -15,11 +27,12 @@ const publicItems = [
 ]
 
 const authenticatedItems = [
+  { href: '/mes-listes', label: 'Mes listes', icon: Bookmark },
+  { href: '/pour-vous', label: 'Pour vous', icon: Sparkles },
   { href: '/listes-partagees', label: 'Listes partagées', icon: Share2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
   { href: '/watch', label: 'Watch Together', icon: PlayCircle },
 ]
-
 export function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
