@@ -1,6 +1,8 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { mutate } from 'swr'
+import { PROFILE_STATS_KEY } from '@/lib/profile-stats'
 import {
   detectVideoProvider,
   extractVimeoId,
@@ -99,22 +101,62 @@ export async function createSharedList(name: string) { const user = await requir
 export async function acceptSharedList(inviteToken: string) { const user = await requireUser(); const { data: list, error } = await getSupabase().from('shared_lists').select('id, name').eq('invite_token', inviteToken).single(); if (error) throw error; const { error: memberError } = await getSupabase().from('shared_list_members').upsert({ list_id: list.id, user_id: user.id }); if (memberError) throw memberError; return list }
 export async function castSharedListVote(listId: string, movieId: number) { const user = await requireUser(); const { error } = await getSupabase().from('shared_list_votes').upsert({ list_id: listId, movie_id: movieId, user_id: user.id }, { onConflict: 'list_id,movie_id,user_id' }); if (error) throw error }
 export async function submitReport(targetType: 'topic' | 'message', targetId: string, reason: string) { const user = await requireUser(); const cleanReason = reason.trim().slice(0, 500); if (cleanReason.length < 3) throw new Error('Le motif doit contenir au moins 3 caractères.'); const { error } = await getSupabase().from('content_reports').insert({ reporter_id: user.id, target_type: targetType, target_id: targetId, reason: cleanReason }); if (error) throw error }
-export async function saveMovie(movieId: number, status: 'watchlist' | 'watched' | 'favorite', watchedAt?: string) { const user = await requireUser(); if (status === 'watched') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watchlist'); if (status === 'watchlist') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watched'); const { error } = await getSupabase().from('user_movies').upsert({ user_id: user.id, movie_id: movieId, status, watched_at: watchedAt ?? null }, { onConflict: 'user_id,movie_id,status' }); if (error) throw error }
-export async function getMyMovies() { const user = await requireUser(); const { data, error } = await getSupabase().from('user_movies').select('movie_id, status, watched_at, rating, comment, created_at').eq('user_id', user.id).order('created_at', { ascending: false }); if (error) throw error; return data ?? [] }
-export async function removeMovie(
-  movieId: number,
-  status: "watchlist" | "watched" | "favorite"
-) {
-  const user = await requireUser();
+type MovieStatus = 'watchlist' | 'watched' | 'favorite'
 
-  const { error } = await getSupabase()
-    .from("user_movies")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("movie_id", movieId)
-    .eq("status", status);
+async function requestMovieEntries(path: string, init?: RequestInit) {
+  const response = await fetch(path, {
+    ...init,
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  })
+  const body = await response.json().catch(() => null) as { error?: string } | null
+  if (!response.ok) throw new Error(body?.error ?? `Movie request failed (${response.status}).`)
+  return body
+}
 
-  if (error) {
-    throw error;
-  }
+function refreshProfileStats() {
+  void mutate(
+    PROFILE_STATS_KEY,
+    async () => {
+      const response = await fetch(PROFILE_STATS_KEY, { cache: 'no-store' })
+      if (!response.ok) throw new Error(`Profile stats request failed (${response.status}).`)
+      return response.json()
+    },
+    { revalidate: false },
+  ).catch((error) => {
+    console.error('[CinéTrack] profile stats refresh failed:', error)
+  })
+}
+
+export async function saveMovie(movieId: number, status: MovieStatus, watchedAt?: string) {
+  await requireUser()
+  await requestMovieEntries('/api/movies', {
+    method: 'POST',
+    body: JSON.stringify({ movieId, status, watchedAt }),
+  })
+  refreshProfileStats()
+}
+
+export async function getMyMovies() {
+  await requireUser()
+  const response = await fetch('/api/movies', { cache: 'no-store' })
+  const body = await response.json().catch(() => null) as { error?: string } | Array<{
+    movie_id: number
+    status: MovieStatus
+    watched_at: string | null
+    rating: number | null
+    comment: string | null
+    created_at: string
+  }> | null
+  if (!response.ok) throw new Error(!Array.isArray(body) ? body?.error ?? `Movie request failed (${response.status}).` : `Movie request failed (${response.status}).`)
+  if (!Array.isArray(body)) throw new Error(body?.error ?? 'Invalid movie list response.')
+  return body
+}
+
+export async function removeMovie(movieId: number, status: MovieStatus) {
+  await requireUser()
+  await requestMovieEntries(`/api/movies?movieId=${encodeURIComponent(movieId)}&status=${encodeURIComponent(status)}`, {
+    method: 'DELETE',
+  })
+  refreshProfileStats()
 }

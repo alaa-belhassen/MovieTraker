@@ -1,5 +1,7 @@
 // U3 - Calcul des statistiques du profil (fonctions pures, sans accès réseau)
 
+export const PROFILE_STATS_KEY = '/api/profile/stats'
+
 export type WatchedEntry = { movie_id: number; watched_at: string | null; created_at: string | null; rating: number | null }
 export type MovieInfo = { id: number; title: string; poster_path: string | null; runtime: number | null; genres: { id: number; name: string }[] }
 
