@@ -3,7 +3,14 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Check, Copy, Link2, MoreHorizontal, Plus, Search, Shield, Trash2, UserPlus, Users, X } from 'lucide-react'
-import { acceptSharedList, castSharedListVote, createSharedList, getCurrentUser, supabase } from '@/lib/cinetrack-data'
+import {
+  acceptSharedList,
+  castSharedListVote,
+  createSharedList,
+  getCurrentUser,
+  getSharedListInviteToken,
+  inviteSharedListMember,
+} from '@/lib/cinetrack-data'
 
 const demoMovies = [
   { id: 1, title: 'Dune : Deuxième partie', year: 2024, image: 'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg' },
@@ -33,8 +40,25 @@ export function SharedListDetail({ id }: { id: string }) {
   const [members, setMembers] = useState([{ initials: 'ML', name: 'Marie Laurent', role: 'Propriétaire', status: 'Actif' }, { initials: 'CA', name: 'Camille', role: 'Membre', status: 'Actif' }, { initials: 'JM', name: 'Julien', role: 'Membre', status: 'Invitation en attente' }])
   const [open, setOpen] = useState(false); const [tab, setTab] = useState<'pseudo' | 'lien'>('pseudo'); const [search, setSearch] = useState(''); const [link, setLink] = useState(''); const [copied, setCopied] = useState(false)
   const results = useMemo(() => search ? [{ initials: 'SO', name: 'Sophie Martin' }, { initials: 'AL', name: 'Alexandre Leroy' }].filter(user => user.name.toLowerCase().includes(search.toLowerCase())) : [], [search])
-  async function generateLink() { const { data } = await supabase.from('shared_lists').select('invite_token').eq('id', id).maybeSingle(); setLink(`${window.location.origin}/rejoindre/${data?.invite_token ?? id}`); setCopied(false) }
-  async function invite(name: string, initials: string) { const { data: profile } = await supabase.from('profiles').select('id').eq('username', name).maybeSingle(); const { data: user } = await supabase.auth.getUser(); if (profile && user.user) await supabase.from('shared_list_members').upsert({ list_id: id, user_id: profile.id }); setMembers([...members, { initials, name, role: 'Membre', status: 'Invitation en attente' }]); setSearch('') }
+  async function generateLink() {
+    try {
+      const inviteToken = await getSharedListInviteToken(id)
+      if (!inviteToken) throw new Error('The shared list has no invitation token.')
+      setLink(`${window.location.origin}/rejoindre/${inviteToken}`)
+      setCopied(false)
+    } catch (error) {
+      console.error('[CinéTrack] shared list link unavailable:', error)
+    }
+  }
+  async function invite(name: string, initials: string) {
+    try {
+      await inviteSharedListMember(id, name)
+      setMembers([...members, { initials, name, role: 'Membre', status: 'Invitation en attente' }])
+      setSearch('')
+    } catch (error) {
+      console.error('[CinéTrack] shared list invitation failed:', error)
+    }
+  }
   return <main className="min-h-screen bg-background text-foreground"><div className="mx-auto max-w-7xl px-5 py-12 md:px-8"><Link href="/listes-partagees" className="flex items-center gap-2 text-sm text-muted-foreground"><ArrowLeft className="size-4" />Toutes les listes partagées</Link><div className="mt-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">Couple</span><h1 className="mt-4 text-4xl font-semibold tracking-tight">Nos films du dimanche</h1><p className="mt-2 text-muted-foreground">Les films à choisir pour nos soirées.</p></div><button onClick={() => setOpen(true)} className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground"><UserPlus className="size-4" />Ajouter un membre</button></div><div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px]"><section><h2 className="text-xl font-semibold">Films proposés</h2><div className="mt-4 grid gap-3">{demoMovies.map((movie, index) => <div key={movie.id} className={`flex items-center gap-4 rounded-2xl border bg-card p-3 ${index === 0 ? 'border-primary' : 'border-border'}`}><img src={movie.image} alt={`Affiche de ${movie.title}`} className="size-20 rounded-xl object-cover" /><div className="min-w-0 flex-1"><div className="flex items-center gap-2">{index === 0 && <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground">GAGNANT</span>}<span className="text-xs text-muted-foreground">{3 - index} votes</span></div><h3 className="mt-1 font-semibold">{movie.title}</h3><p className="text-sm text-muted-foreground">{movie.year}</p></div><button onClick={async () => { const user = await getCurrentUser(); if (!user) { window.location.href = `/auth/login?next=/listes-partagees/${id}`; return } try { await castSharedListVote(id, movie.id) } catch {} }} className="rounded-lg border border-border px-3 py-2 text-xs">Voter</button></div>)}</div></section><aside className="rounded-2xl border border-border bg-card p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Membres ({members.length}/2)</h2><Shield className="size-4 text-primary" /></div><div className="mt-5 flex flex-col gap-4">{members.map((member, index) => <div key={member.name} className="flex items-center gap-3"><Avatar initials={member.initials} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.name}</p><p className="text-xs text-muted-foreground">{member.role} · {member.status}</p></div>{index > 0 && <button onClick={() => setMembers(members.filter(item => item.name !== member.name))} className="text-muted-foreground hover:text-destructive" aria-label={`Retirer ${member.name}`}><Trash2 className="size-4" /></button>}</div>)}</div></aside></div></div>{open && <Dialog onClose={() => setOpen(false)}><h2 className="text-xl font-semibold">Ajouter un membre</h2><div className="mt-5 flex border-b border-border"><button onClick={() => setTab('pseudo')} className={`flex-1 border-b-2 py-3 text-sm ${tab === 'pseudo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Par pseudo</button><button onClick={() => setTab('lien')} className={`flex-1 border-b-2 py-3 text-sm ${tab === 'lien' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Par lien</button></div>{tab === 'pseudo' ? <><div className="mt-5 flex items-center gap-2 rounded-xl border border-border px-3"><Search className="size-4 text-muted-foreground" /><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un pseudo..." className="w-full bg-transparent py-3 text-sm outline-none" /></div><div className="mt-3 flex flex-col gap-2">{results.map(result => <div key={result.name} className="flex items-center gap-3 rounded-xl p-2"><Avatar initials={result.initials} /><span className="flex-1 text-sm">{result.name}</span><button onClick={() => invite(result.name, result.initials)} className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground">Inviter</button></div>)}{search && !results.length && <p className="py-5 text-center text-sm text-muted-foreground">Aucun utilisateur trouvé</p>}</div></> : <div className="mt-6"><p className="text-sm text-muted-foreground">Générez un lien valable 7 jours. Toute personne disposant du lien pourra demander à rejoindre la liste.</p>{link ? <div className="mt-4 flex items-center gap-2 rounded-xl border border-border p-2"><Link2 className="ml-1 size-4 text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-xs">{link}</span><button onClick={() => { navigator.clipboard?.writeText(link); setCopied(true) }} className="rounded-lg bg-muted px-3 py-2 text-xs">{copied ? 'Copié' : 'Copier'}</button></div> : <button onClick={generateLink} className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">Générer un lien d’invitation</button>}{link && <button onClick={() => setLink('')} className="mt-4 text-sm text-destructive">Désactiver le lien</button>}</div>}</Dialog>}</main>
 }
 

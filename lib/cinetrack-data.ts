@@ -1,6 +1,16 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import {
+  detectVideoProvider,
+  extractVimeoId,
+  extractYouTubeId,
+  validateVideoUrl,
+  type VideoProvider,
+} from '@/lib/video-provider'
+
+export { detectVideoProvider, extractVimeoId, extractYouTubeId, validateVideoUrl }
+export type { VideoProvider }
 
 const getSupabase = () => createClient()
 export const supabase = new Proxy({}, { get: (_, property: string) => (getSupabase() as unknown as Record<string, unknown>)[property] }) as ReturnType<typeof createClient>
@@ -9,41 +19,6 @@ export async function getCurrentUser() { const { data } = await getSupabase().au
 export async function requireUser() { const user = await getCurrentUser(); if (!user) throw new Error('AUTH_REQUIRED'); return user }
 export async function getMyProfile() { const user = await requireUser(); const { data, error } = await getSupabase().from('profiles').select('id, username, avatar_url, is_moderator').eq('id', user.id).maybeSingle(); if (error) throw error; return data }
 
-export type VideoProvider = 'youtube' | 'vimeo' | 'direct' | 'hls' | 'dash' | 'external'
-export function extractYouTubeId(value: string) {
-  try {
-    const url = new URL(value.trim())
-    if (!/youtube\.com$|youtu\.be$/.test(url.hostname.replace(/^www\./, ''))) return null
-    if (url.hostname.replace(/^www\./, '') === 'youtu.be') return url.pathname.slice(1).split('/')[0] || null
-    if (url.pathname === '/watch') return url.searchParams.get('v')
-    const match = url.pathname.match(/^\/(?:shorts|embed|live)\/([^/?]+)/)
-    return match?.[1] ?? null
-  } catch { return null }
-}
-
-export function extractVimeoId(value: string) {
-  try {
-    const url = new URL(value.trim())
-    if (!/vimeo\.com$/.test(url.hostname.replace(/^www\./, ''))) return null
-    return url.pathname.match(/\/(?:video\/)?(\d+)/)?.[1] ?? null
-  } catch { return null }
-}
-
-export function detectVideoProvider(value: string): VideoProvider {
-  const url = value.toLowerCase()
-  if (extractYouTubeId(value)) return 'youtube'
-  if (extractVimeoId(value)) return 'vimeo'
-  if (/\.m3u8(?:$|[?#])/.test(url)) return 'hls'
-  if (/\.mpd(?:$|[?#])/.test(url)) return 'dash'
-  if (/\.(mp4|webm|ogg)(?:$|[?#])/.test(url)) return 'direct'
-  return 'external'
-}
-export function validateVideoUrl(value: string) {
-  const url = value.trim()
-  if (!url || url.length > 2000) return false
-  try { const parsed = new URL(url); return parsed.protocol === 'https:' }
-  catch { return false }
-}
 export type WatchRoomSummary = { id: string; title: string; video_url: string | null; video_provider: string | null; mode: 'video' | 'timer'; status: string; scheduled_at: string | null; host_id: string; role: 'owner' | 'participant' }
 export async function getMyWatchRooms(): Promise<WatchRoomSummary[]> {
   const user = await requireUser()
@@ -107,3 +82,20 @@ export async function castSharedListVote(listId: string, movieId: number) { cons
 export async function submitReport(targetType: 'topic' | 'message', targetId: string, reason: string) { const user = await requireUser(); const cleanReason = reason.trim().slice(0, 500); if (cleanReason.length < 3) throw new Error('Le motif doit contenir au moins 3 caractères.'); const { error } = await getSupabase().from('content_reports').insert({ reporter_id: user.id, target_type: targetType, target_id: targetId, reason: cleanReason }); if (error) throw error }
 export async function saveMovie(movieId: number, status: 'watchlist' | 'watched' | 'favorite', watchedAt?: string) { const user = await requireUser(); if (status === 'watched') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watchlist'); if (status === 'watchlist') await getSupabase().from('user_movies').delete().eq('user_id', user.id).eq('movie_id', movieId).eq('status', 'watched'); const { error } = await getSupabase().from('user_movies').upsert({ user_id: user.id, movie_id: movieId, status, watched_at: watchedAt ?? null }, { onConflict: 'user_id,movie_id,status' }); if (error) throw error }
 export async function getMyMovies() { const user = await requireUser(); const { data, error } = await getSupabase().from('user_movies').select('movie_id, status, watched_at, rating, comment, created_at').eq('user_id', user.id).order('created_at', { ascending: false }); if (error) throw error; return data ?? [] }
+export async function removeMovie(
+  movieId: number,
+  status: "watchlist" | "watched" | "favorite"
+) {
+  const user = await requireUser();
+
+  const { error } = await getSupabase()
+    .from("user_movies")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("movie_id", movieId)
+    .eq("status", status);
+
+  if (error) {
+    throw error;
+  }
+}

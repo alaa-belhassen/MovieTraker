@@ -1,5 +1,5 @@
-import CinetrackApp from '@/components/cinetrack-app'
+import ForumPage from '@/components/forum-page'
 
 export default function ForumRoute() {
-  return <CinetrackApp />
+  return <ForumPage />
 }

@@ -1,22 +1,45 @@
+import 'server-only'
 
-import { MongoClient } from "mongodb";
+import { MongoClient, type Db } from 'mongodb'
 
-const uri = process.env.MONGODB_URI;
-
-if (!uri) {
-  throw new Error("La variable MONGODB_URI est absente de .env.local");
+type MongoGlobals = typeof globalThis & {
+  cinetrackMongoClient?: Promise<MongoClient>
+  cinetrackMongoDatabase?: Promise<Db>
 }
 
-const globalForMongo = globalThis as typeof globalThis & {
-  _mongoClientPromise?: Promise<MongoClient>;
-};
+const mongoGlobals = globalThis as MongoGlobals
 
-const clientPromise =
-  globalForMongo._mongoClientPromise ??
-  new MongoClient(uri).connect();
+export async function getMongoDatabase() {
+  if (!mongoGlobals.cinetrackMongoDatabase) {
+    const uri = process.env.MONGODB_URI?.trim()
+    if (!uri) throw new Error('MONGODB_URI must be configured to use MongoDB.')
 
-if (process.env.NODE_ENV !== "production") {
-  globalForMongo._mongoClientPromise = clientPromise;
+    mongoGlobals.cinetrackMongoClient ??= new MongoClient(uri).connect()
+    mongoGlobals.cinetrackMongoDatabase = mongoGlobals.cinetrackMongoClient.then(async client => {
+      const database = client.db(process.env.MONGODB_DB?.trim() || 'cinetrack')
+      await Promise.all([
+        database.collection('profiles').createIndex({ id: 1 }, { unique: true }),
+        database.collection('user_movies').createIndex({ user_id: 1, movie_id: 1, status: 1 }, { unique: true }),
+        database.collection('favorite_actors').createIndex({ user_id: 1, actor_id: 1 }, { unique: true }),
+        database.collection('rooms').createIndex({ id: 1 }, { unique: true }),
+        database.collection('room_participants').createIndex({ room_id: 1, user_id: 1 }, { unique: true }),
+        database.collection('shared_lists').createIndex({ id: 1 }, { unique: true }),
+        database.collection('shared_lists').createIndex({ invite_token: 1 }, { unique: true }),
+        database.collection('shared_list_members').createIndex({ list_id: 1, user_id: 1 }, { unique: true }),
+        database.collection('shared_list_votes').createIndex({ list_id: 1, movie_id: 1, user_id: 1 }, { unique: true }),
+        database.collection('room_playback_state').createIndex({ room_id: 1 }, { unique: true }),
+        database.collection('room_messages').createIndex({ room_id: 1, created_at: -1 }),
+        database.collection('room_messages').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_topics').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_topics').createIndex({ category: 1, created_at: -1 }),
+        database.collection('forum_replies').createIndex({ id: 1 }, { unique: true }),
+        database.collection('forum_replies').createIndex({ topic_id: 1, created_at: 1 }),
+        database.collection('chat_history').createIndex({ owner_key: 1 }, { unique: true }),
+        database.collection('chat_history').createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
+      ])
+      return database
+    })
+  }
+
+  return mongoGlobals.cinetrackMongoDatabase
 }
-
-export default clientPromise;

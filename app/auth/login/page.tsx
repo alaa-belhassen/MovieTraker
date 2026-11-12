@@ -34,14 +34,23 @@ export default function LoginPage() {
           })
 
       if (result.error) {
-        const errorMessage = result.error.message.toLowerCase()
-        setMessage(errorMessage.includes('captcha')
-          ? 'La vérification de sécurité a échoué. Rechargez la page puis réessayez.'
-          : errorMessage.includes('invalid')
-            ? 'Email ou mot de passe invalide.'
-            : errorMessage.includes('confirm')
-              ? 'Confirmez votre adresse email avant de vous connecter.'
-              : 'Impossible de terminer la demande. Vérifiez les informations saisies puis réessayez.')
+        const errorMessage = (result.error.message || '').toLowerCase()
+        const status = (result.error as any).status
+        if (errorMessage.includes('rate limit') || errorMessage.includes('rate_limit') || status === 429) {
+          setMessage('Limite d’envoi d’emails atteinte par Supabase. Patientez quelques instants ou connectez-vous avec un compte existant.')
+        } else if (errorMessage.includes('already registered') || errorMessage.includes('user already exists')) {
+          setMessage('Un compte existe déjà avec cette adresse email. Veuillez vous connecter.')
+        } else if (errorMessage.includes('api key') || errorMessage.includes('apikey')) {
+          setMessage('Clé Supabase non trouvée ou non reconnue. Rechargez la page.')
+        } else if (errorMessage.includes('captcha')) {
+          setMessage('La vérification de sécurité a échoué. Rechargez la page puis réessayez.')
+        } else if (errorMessage.includes('invalid') || errorMessage.includes('credentials')) {
+          setMessage('Email ou mot de passe invalide.')
+        } else if (errorMessage.includes('confirm')) {
+          setMessage('Confirmez votre adresse email avant de vous connecter.')
+        } else {
+          setMessage(result.error.message || 'Impossible de terminer la demande. Vérifiez les informations saisies.')
+        }
         return
       }
 
@@ -68,5 +77,5 @@ export default function LoginPage() {
       setBusy(false)
     }
   }
-  return <main className="grid min-h-screen place-items-center bg-background px-5 text-foreground"><div className="w-full max-w-md rounded-3xl border border-border bg-card p-7 shadow-2xl"><Link href="/" className="text-sm text-muted-foreground">← Retour à CinéTrack</Link><p className="mt-8 text-sm font-medium text-primary">Votre espace personnel</p><h1 className="mt-2 text-3xl font-semibold">{mode === 'login' ? 'Se connecter' : 'Créer un compte'}</h1><p className="mt-3 text-sm text-muted-foreground">Participez au forum, rejoignez des listes et retrouvez vos films.</p><form onSubmit={submit} className="mt-7 flex flex-col gap-4">{mode === 'signup' && <input required minLength={3} maxLength={30} value={username} onChange={e => setUsername(e.target.value)} placeholder="Nom public" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" />}<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" /><input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mot de passe (8 caractères minimum)" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" />{message && <p role="alert" className="rounded-xl bg-primary/10 p-3 text-sm text-primary">{message}</p>}<button disabled={busy} className="rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{busy ? 'Patientez…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</button></form><button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage('') }} className="mt-6 text-sm text-muted-foreground underline underline-offset-4">{mode === 'login' ? 'Créer un compte' : 'J’ai déjà un compte'}</button></div></main>
+  return <main className="grid min-h-screen place-items-center bg-background px-5 text-foreground"><div className="w-full max-w-md rounded-3xl border border-border bg-card p-7 shadow-2xl"><Link href="/" className="text-sm text-muted-foreground">← Retour à CinéTrack</Link><p className="mt-8 text-sm font-medium text-primary">Votre espace personnel</p><h1 className="mt-2 text-3xl font-semibold">{mode === 'login' ? 'Se connecter' : 'Créer un compte'}</h1><p className="mt-3 text-sm text-muted-foreground">Participez au forum, rejoignez des listes et retrouvez vos films.</p><form onSubmit={submit} className="mt-7 flex flex-col gap-4">{mode === 'signup' && <input required minLength={3} maxLength={30} value={username} onChange={e => setUsername(e.target.value)} placeholder="Nom public" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" />}<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" /><input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mot de passe (8 caractères minimum)" className="rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" />{message && <p role="alert" className="rounded-xl bg-primary/10 p-3 text-sm text-primary">{message}</p>}<button disabled={busy} className="rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{busy ? 'Patientez…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</button></form>{mode === 'login' && <Link href="/auth/forgot" className="mt-5 block text-sm text-muted-foreground underline underline-offset-4">Mot de passe oublié ?</Link>}<button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage('') }} className="mt-4 block text-sm text-muted-foreground underline underline-offset-4">{mode === 'login' ? 'Créer un compte' : 'J’ai déjà un compte'}</button></div></main>
 }

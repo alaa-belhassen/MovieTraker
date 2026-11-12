@@ -20,10 +20,12 @@ export function AuthProvider({ initialUser, children }: { initialUser: User | nu
     let active = true
     async function loadProfile(userId: string) {
       try {
-        const { data } = await supabase.from('profiles').select('id, username, avatar_url, is_moderator').eq('id', userId).maybeSingle()
-        if (active) setProfile(data as Profile | null)
+        const response = await fetch('/api/profile')
+        if (!response.ok) throw new Error(`Profile request failed (${response.status}).`)
+        const data = await response.json() as Profile
+        if (active) setProfile(data.id === userId ? data : null)
       } catch (error) {
-        console.warn('[v0] Profile unavailable', error)
+        console.warn('[CinéTrack] MongoDB profile unavailable', error)
         if (active) setProfile(null)
       }
     }
