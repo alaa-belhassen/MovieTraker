@@ -19,7 +19,7 @@ export function useWatchParty(roomId: string, isHost: boolean) {
     }
     const load = async () => {
       try {
-        const response = await fetch(`/api/watch/rooms/playback?roomId=${encodeURIComponent(roomId)}`)
+        const response = await fetch(`/api/watch/rooms/playback?roomId=${encodeURIComponent(roomId)}`, { cache: 'no-store' })
         if (!response.ok) throw new Error(`Playback state request failed (${response.status}).`)
         accept(await response.json() as State)
       } catch (error) {
@@ -34,7 +34,7 @@ export function useWatchParty(roomId: string, isHost: boolean) {
     if (!isHost) return false
     if (lastSequence.current === 0) {
       try {
-        const response = await fetch(`/api/watch/rooms/playback?roomId=${encodeURIComponent(roomId)}`)
+        const response = await fetch(`/api/watch/rooms/playback?roomId=${encodeURIComponent(roomId)}`, { cache: 'no-store' })
         if (!response.ok) throw new Error(`Playback state request failed (${response.status}).`)
         const current = await response.json() as State
         lastSequence.current = current.sequence

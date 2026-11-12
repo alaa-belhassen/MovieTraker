@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
     if (!roomId) return NextResponse.json({ error: 'ROOM_ID_REQUIRED' }, { status: 400 })
     const room = await getMongoRoom(roomId, user.id)
     if (!room) return NextResponse.json({ error: 'ROOM_FORBIDDEN' }, { status: 403 })
-    return NextResponse.json(await getOrCreatePlaybackState(roomId, user.id))
+    return NextResponse.json(await getOrCreatePlaybackState(roomId, user.id), {
+      headers: { 'Cache-Control': 'no-store' },
+    })
   } catch (error) {
     console.error('[CinéTrack] playback state load failed:', error)
     return NextResponse.json({ error: 'PLAYBACK_UNAVAILABLE' }, { status: 500 })
@@ -106,7 +108,9 @@ export async function POST(request: NextRequest) {
       { room_id: roomId, sequence: expectedSequence as number },
       { $set: set, $inc: { sequence: 1 } },
     )
-    return NextResponse.json(await getOrCreatePlaybackState(roomId, user.id))
+    return NextResponse.json(await getOrCreatePlaybackState(roomId, user.id), {
+      headers: { 'Cache-Control': 'no-store' },
+    })
   } catch (error) {
     console.error('[CinéTrack] playback command failed:', error)
     return NextResponse.json({ error: 'PLAYBACK_UPDATE_FAILED' }, { status: 500 })

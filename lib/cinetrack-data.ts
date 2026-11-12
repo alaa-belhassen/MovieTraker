@@ -74,7 +74,26 @@ export async function createRoom(input: { title: string; videoUrl: string; movie
     mode: payload.mode,
   }
 }
-export async function updateRoomVideo(roomId: string, value: string) { const user = await requireUser(); const videoUrl = value.trim(); if (!validateVideoUrl(videoUrl)) throw new Error('Lien vidéo invalide.'); const { data, error } = await getSupabase().from('rooms').update({ video_url: videoUrl, video_provider: detectVideoProvider(videoUrl), rights_confirmed_at: new Date().toISOString() }).eq('id', roomId).eq('host_id', user.id).select('id, video_url, video_provider, mode').single(); if (error) throw error; if (data.video_url !== videoUrl) throw new Error('Le lien vidéo n’a pas pu être enregistré.'); return data }
+export async function updateRoomVideo(roomId: string, value: string) {
+  await requireUser()
+  const videoUrl = value.trim()
+  if (!validateVideoUrl(videoUrl)) throw new Error('Lien vidéo invalide.')
+
+  const response = await fetch('/api/watch/rooms', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomId, videoUrl }),
+  })
+  const result = await response.json() as {
+    id?: string
+    video_url?: string
+    video_provider?: VideoProvider
+    error?: string
+  }
+  if (!response.ok) throw new Error(result.error ?? 'Le lien vidéo n’a pas pu être enregistré.')
+  if (result.video_url !== videoUrl) throw new Error('Le lien vidéo n’a pas pu être enregistré.')
+  return result
+}
 
 export async function createSharedList(name: string) { const user = await requireUser(); const { data, error } = await getSupabase().from('shared_lists').insert({ name: name.trim(), creator_id: user.id }).select('id, name, invite_token').single(); if (error) throw error; const { error: memberError } = await getSupabase().from('shared_list_members').insert({ list_id: data.id, user_id: user.id }); if (memberError) throw memberError; return data }
 export async function acceptSharedList(inviteToken: string) { const user = await requireUser(); const { data: list, error } = await getSupabase().from('shared_lists').select('id, name').eq('invite_token', inviteToken).single(); if (error) throw error; const { error: memberError } = await getSupabase().from('shared_list_members').upsert({ list_id: list.id, user_id: user.id }); if (memberError) throw memberError; return list }

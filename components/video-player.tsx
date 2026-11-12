@@ -128,6 +128,7 @@ function YouTubePlayerView({
   const playerRef = useRef<YouTubePlayer | null>(null)
   const playbackStateRef = useRef(playbackState)
   const suppressEventsRef = useRef(false)
+  const expectedPlayerStateRef = useRef<number | null>(null)
   const suppressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const applyStateRef = useRef<(state: PlaybackState) => void>(() => {})
   const [ready, setReady] = useState(false)
@@ -151,6 +152,7 @@ function YouTubePlayerView({
 
       if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current)
       suppressEventsRef.current = true
+      expectedPlayerStateRef.current = state.is_playing ? 1 : 2
       if (shouldSeek) player.seekTo(target, true)
       try {
         player.setPlaybackRate(state.playback_rate)
@@ -161,6 +163,7 @@ function YouTubePlayerView({
       else player.pauseVideo()
       suppressTimeoutRef.current = setTimeout(() => {
         suppressEventsRef.current = false
+        expectedPlayerStateRef.current = null
         suppressTimeoutRef.current = null
       }, 1000)
     }
@@ -202,7 +205,12 @@ function YouTubePlayerView({
             onBlocked(reason)
           },
           onStateChange: (event) => {
-            if (suppressEventsRef.current || !playerRef.current) return
+            if (!playerRef.current) return
+            if (suppressEventsRef.current && event.data === expectedPlayerStateRef.current) {
+              expectedPlayerStateRef.current = null
+              return
+            }
+            expectedPlayerStateRef.current = null
             if (event.data === 1) emitPlayerEvent('play', playerRef.current.getCurrentTime())
             else if (event.data === 2 || event.data === 0) emitPlayerEvent('pause', playerRef.current.getCurrentTime())
           },
@@ -220,6 +228,7 @@ function YouTubePlayerView({
       if (pollTimer) clearInterval(pollTimer)
       if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current)
       suppressEventsRef.current = false
+      expectedPlayerStateRef.current = null
       playerRef.current?.destroy()
       playerRef.current = null
     }

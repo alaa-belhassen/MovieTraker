@@ -49,12 +49,19 @@ export default function ForumPage() {
 
   useEffect(() => {
     let active = true
-    const refresh = async () => {
-      if (active) await loadTopics(true)
+    const refresh = () => {
+      if (active && document.visibilityState === 'visible') void loadTopics()
     }
-    void refresh()
-    const interval = window.setInterval(() => { if (active) void loadTopics() }, 5000)
-    return () => { active = false; window.clearInterval(interval) }
+    void loadTopics(true)
+    const interval = window.setInterval(refresh, 30000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
   }, [])
 
   function openForm(topic?: ForumTopic) {

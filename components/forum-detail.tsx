@@ -45,8 +45,18 @@ export default function ForumDetail({ topicId }: { topicId: string }) {
     let active = true
     setLoading(true)
     void loadTopic()
-    const interval = window.setInterval(() => { if (active) void loadTopic() }, 2500)
-    return () => { active = false; window.clearInterval(interval) }
+    const refresh = () => {
+      if (active && document.visibilityState === 'visible') void loadTopic()
+    }
+    const interval = window.setInterval(refresh, 30000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
   }, [topicId])
 
   async function addReply(event: FormEvent) {

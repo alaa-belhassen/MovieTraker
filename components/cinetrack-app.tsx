@@ -12,6 +12,9 @@ import {
   SharedListsOverview,
   SharedListDetail
 } from '@/components/shared-lists-feature'
+import { DeleteAccountButton, EditProfileButton, SignOutButton } from './profile/edit-profile'
+import { useAuth } from './auth-provider'
+import { ProfileStatsSection } from './profile/profile-stats'
 const movies = [
   { id: 1, title: 'Dune : Deuxième partie', year: 2024, rating: 8.7, genre: 'Science-fiction', image: 'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg' },
   { id: 2, title: 'Anatomie d’une chute', year: 2023, rating: 8.1, genre: 'Drame', image: 'https://image.tmdb.org/t/p/w500/k3waqVXSnvCZWfJYNtdamTgTtTA.jpg' },

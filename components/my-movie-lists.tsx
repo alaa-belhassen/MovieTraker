@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getMyMovies, removeMovie } from "@/lib/cinetrack-data";
+import FavoriteActorsPage from "@/components/favorite-actors-page";
 const tabs = [
   "À regarder",
   "Déjà vu",
@@ -152,9 +153,7 @@ async function handleRemove(
       </div>
 
       {active === "Acteurs suivis" ? (
-        <p className="mt-8 text-muted-foreground">
-          La liste des acteurs suivis sera ajoutée prochainement.
-        </p>
+        <FavoriteActorsPage embedded />
       ) : loading ? (
         <p className="mt-8">Chargement des films...</p>
       ) : error ? (

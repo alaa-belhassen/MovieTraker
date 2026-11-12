@@ -15,8 +15,10 @@ import {
   PlayCircle,
   Bookmark,
   Sparkles,
+  Menu,
+  X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { useAuth } from '@/components/auth-provider'
 const publicItems = [
   { href: '/', label: 'Accueil', icon: House },

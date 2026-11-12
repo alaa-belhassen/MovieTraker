@@ -164,7 +164,7 @@ async function toggleFavorite() {
           type="button"
           onClick={addToWatchlist}
           disabled={loading || checking || saved}
-          className="flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-3 font-semibold text-black disabled:opacity-60"
+          className="flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-3 font-semibold text-black"
         >
           {saved ? (
             <Check size={20} />
@@ -172,13 +172,7 @@ async function toggleFavorite() {
             <Bookmark size={20} />
           )}
 
-          {checking
-            ? 'Vérification...'
-            : loading
-              ? 'Enregistrement...'
-              : saved
-                ? 'Ajouté à ma liste'
-                : 'À regarder'}
+          {saved ? 'Ajouté à ma liste' : 'À regarder'}
         </button>
 
         {/* Bouton Déjà vu */}
@@ -186,7 +180,7 @@ async function toggleFavorite() {
           type="button"
           onClick={markAsWatched}
           disabled={loading || checking || watched}
-          className="flex items-center gap-2 rounded-xl border border-white/30 px-5 py-3 font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-xl border border-white/30 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
         >
           {watched ? (
             <Check size={20} />
@@ -194,20 +188,14 @@ async function toggleFavorite() {
             <Eye size={20} />
           )}
 
-          {checking
-            ? 'Vérification...'
-            : loading
-              ? 'Enregistrement...'
-              : watched
-                ? 'Déjà vu ✓'
-                : 'Marquer comme vu'}
+          {watched ? 'Déjà vu ✓' : 'Marquer comme vu'}
         </button>
         {/* Bouton Favoris */}
 <button
   type="button"
   onClick={toggleFavorite}
   disabled={loading || checking}
-  className={`flex items-center gap-2 rounded-xl border px-5 py-3 font-semibold transition disabled:opacity-60 ${
+  className={`flex items-center gap-2 rounded-xl border px-5 py-3 font-semibold transition ${
     favorite
       ? 'border-red-500 bg-red-500 text-white'
       : 'border-red-500/50 text-red-400 hover:bg-red-500/10'
@@ -218,13 +206,7 @@ async function toggleFavorite() {
     fill={favorite ? 'currentColor' : 'none'}
   />
 
-  {checking
-    ? 'Vérification...'
-    : loading
-      ? 'Enregistrement...'
-      : favorite
-        ? 'Retirer des favoris'
-        : 'Ajouter aux favoris'}
+  {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
 </button>
 
       </div>
