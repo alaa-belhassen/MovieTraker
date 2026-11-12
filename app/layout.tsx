@@ -5,6 +5,7 @@ import { CookieNotice } from '@/components/cookie-notice'
 import { PwaControls } from '@/components/pwa-controls'
 import { Navigation } from '@/components/navigation'
 import { AuthProvider } from '@/components/auth-provider'
+import { ChatBot } from '@/components/chat-bot'
 import { createClient } from '@/lib/supabase/server'
 import './globals.css'
 
@@ -50,6 +51,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Navigation />
           <a href="#main-content" className="skip-link">Aller au contenu principal</a>
           {children}
+          <ChatBot />
           <PwaControls />
           <CookieNotice />
         </AuthProvider>

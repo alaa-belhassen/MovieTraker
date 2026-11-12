@@ -1,2 +1,6 @@
-import { SessionRoom } from '@/components/watch-together-feature'
-export default async function Page({ params }: { params: Promise<{ id: string }> }) { await params; return <SessionRoom /> }
+import { redirect } from 'next/navigation'
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  redirect(`/watch/${id}`)
+}
