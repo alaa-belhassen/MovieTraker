@@ -10,7 +10,7 @@ export type Movie = { id: number; title: string; original_title?: string; overvi
 export type CastMember = { id: number; name: string; character?: string; profile_path: string | null; order?: number }
 export type CrewMember = { id: number; name: string; job?: string; department?: string; profile_path?: string | null }
 export type WatchProvider = { provider_id: number; provider_name: string; logo_path: string | null; display_priority?: number }
-export type Person = { id: number; name: string; profile_path: string | null; known_for_department?: string; popularity?: number }
+export type Person = { id: number; name: string; profile_path: string | null; adult?: boolean; known_for_department?: string; popularity?: number }
 export type MovieDetails = Movie & { tagline?: string; runtime?: number | null; genres: Genre[]; budget?: number; revenue?: number; credits?: { cast: CastMember[]; crew: CrewMember[] }; videos?: { results: { key: string; name: string; site: string; type: string }[] }; 'watch/providers'?: { results?: Record<string, { flatrate?: WatchProvider[]; rent?: WatchProvider[]; buy?: WatchProvider[] }> }; similar?: TmdbList<Movie> }
 export type PersonDetails = Person & { biography?: string; birthday?: string | null; deathday?: string | null; place_of_birth?: string | null; gender?: number; homepage?: string | null; external_ids?: { imdb_id?: string | null; instagram_id?: string | null; twitter_id?: string | null; facebook_id?: string | null }; combined_credits?: { cast: (Movie & { character?: string; media_type?: string })[]; crew: (Movie & { job?: string; media_type?: string })[] }; images?: { profiles: { file_path: string; width: number; height: number }[] } }
 
@@ -37,6 +37,7 @@ export const getGenres = () => tmdbFetch<{ genres: Genre[] }>('/genre/movie/list
 export const discoverByGenre = (genreId: number, sort = 'popularity.desc', page = 1) => tmdbFetch<TmdbList<Movie>>('/discover/movie', { with_genres: genreId, sort_by: sort, page })
 export const getTrendingActors = () => tmdbFetch<TmdbList<Person>>('/trending/person/week')
 export const getPopularActors = (page = 1) => tmdbFetch<TmdbList<Person>>('/person/popular', { page })
+export const getActorBirthplace = (id: number) => tmdbFetch<Pick<PersonDetails, 'place_of_birth'>>(`/person/${id}`, {}, 86400)
 export const getActorDetails = (id: number, language = 'fr-FR') => tmdbFetch<PersonDetails>(`/person/${id}`, { append_to_response: 'combined_credits,images,external_ids', language }, 86400)
 export const getActorBiography = (id: number) => tmdbFetch<PersonDetails>(`/person/${id}`, { append_to_response: 'combined_credits,images,external_ids', language: 'en-US' }, 86400)
 export const searchActors = (query: string, page = 1) => tmdbFetch<TmdbList<Person>>('/search/person', { query, page, include_adult: 'false' })

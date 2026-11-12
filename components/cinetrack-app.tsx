@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
-import { Bookmark, CalendarDays, Check, ChevronRight, Clock3, Heart, Home, Menu, Play, Plus, Search, Star, UserRound, Users, X } from 'lucide-react'
+import { ArrowUpRight, Bookmark, CalendarDays, Check, ChevronRight, Clock3, Heart, Home, Mail, Menu, Play, Plus, Search, ShieldCheck, Sparkles, Star, UserRound, Users, X } from 'lucide-react'
 import { getCurrentUser, saveMovie, submitReport } from '@/lib/cinetrack-data'
 import MyMovieLists from "@/components/my-movie-lists";
 import MovieRecommendations from "@/components/movie-recommendations";
@@ -41,7 +41,99 @@ function ListsPage() {
   );
 }
 function MoviePage() { const [saved, setSaved] = useState(false); const [watched, setWatched] = useState(false); const [rating, setRating] = useState(0); return <Shell><div className="mx-auto max-w-7xl px-5 py-10 md:px-8"><div className="grid gap-8 md:grid-cols-[250px_1fr] md:items-end"><img src={movies[0].image} alt="Affiche de Dune : Deuxième partie" className="w-56 rounded-2xl shadow-2xl" /><div><p className="text-sm text-primary">Science-fiction · Aventure</p><h1 className="mt-2 text-4xl font-semibold md:text-6xl">Dune : Deuxième partie</h1><p className="mt-3 text-muted-foreground">2024 · 2h 46min · Denis Villeneuve</p><p className="mt-6 max-w-2xl leading-7 text-muted-foreground">Paul Atréides s&apos;unit à Chani et aux Fremen tout en cherchant à se venger des conspirateurs qui ont détruit sa famille.</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={async () => { const user = await getCurrentUser(); if (!user) { window.location.href = '/auth/login?next=/film/1'; return } try { await saveMovie(1, saved ? 'favorite' : 'watchlist'); setSaved(!saved) } catch {} }} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">{saved ? <Check className="size-4" /> : <Bookmark className="size-4" />}{saved ? 'Dans ma liste' : 'À regarder'}</button><button onClick={() => setWatched(!watched)} className="rounded-xl border border-border px-4 py-3 text-sm">{watched ? 'Vu le 19 oct. 2026' : 'Déjà vu'}</button><button className="grid size-11 place-items-center rounded-xl border border-border"><Heart className="size-4" /></button></div></div></div><section className="mt-14 grid gap-5 md:grid-cols-3"><div className="rounded-2xl border border-border bg-card p-5"><p className="text-sm text-muted-foreground">Note CinéTrack</p><div className="mt-2 flex items-center gap-2 text-3xl font-semibold"><Star className="size-6 fill-primary text-primary" />4,6 <span className="text-sm font-normal text-muted-foreground">/ 5 · 128 votes</span></div></div><div className="rounded-2xl border border-border bg-card p-5"><p className="text-sm text-muted-foreground">Où regarder</p><p className="mt-3 font-medium">Aucune offre trouvée</p><p className="mt-1 text-sm text-muted-foreground">Disponible dans votre pays prochainement.</p></div><div className="rounded-2xl border border-border bg-card p-5"><p className="text-sm text-muted-foreground">Noter ce film</p><div className="mt-3 flex gap-1">{[1,2,3,4,5].map(n => <button key={n} onClick={() => setRating(n)} aria-label={`${n} étoiles`}><Star className={`size-6 ${rating >= n ? 'fill-primary text-primary' : 'text-muted-foreground'}`} /></button>)}</div></div></section><section className="mt-14"><SectionTitle>Distribution</SectionTitle><div className="flex gap-4 overflow-x-auto">{['Timothée Chalamet','Zendaya','Rebecca Ferguson','Austin Butler'].map(n => <ActorCard key={n} name={n} />)}</div></section><section className="mt-14"><SectionTitle>Vous aimerez aussi</SectionTitle><div className="flex gap-4 overflow-x-auto">{movies.slice(1).map(m => <Poster key={m.id} movie={m} compact />)}</div></section></div></Shell> }
-function ProfilePage() { return <Shell><div className="mx-auto max-w-7xl px-5 py-12 md:px-8"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-primary">Votre espace personnel</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Mon profil</h1></div><div className="flex flex-wrap gap-2"><EditProfileButton /><SignOutButton /></div></div><ProfileStatsSection /><div className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5"><h2 className="font-semibold">Zone sensible</h2><p className="mt-1 text-sm text-muted-foreground">Supprimer définitivement votre compte et vos données.</p><DeleteAccountButton /></div></div></Shell> }
+function ProfilePage() {
+  const { user, profile, loading } = useAuth()
+  const displayName = profile?.username || user?.email?.split('@')[0] || 'Cinéphile'
+  const initials = displayName.slice(0, 2).toUpperCase()
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+    : null
+
+  return (
+    <Shell>
+      <div className="mx-auto max-w-7xl px-5 py-8 md:px-8 md:py-12">
+        <div className="mb-7">
+          <p className="flex items-center gap-2 text-sm font-medium text-primary">
+            <Sparkles className="size-4" aria-hidden="true" />
+            Votre espace personnel
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Mon profil</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Retrouvez votre activité et gérez votre compte CinéTrack.</p>
+        </div>
+
+        <section className="relative isolate overflow-hidden rounded-[2rem] border border-border bg-card p-6 shadow-sm sm:p-8">
+          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_90%_0%,oklch(0.72_0.15_55/.14),transparent_48%)]" />
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+            <div className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-primary/25 bg-primary/10 text-2xl font-semibold text-primary sm:size-24 sm:text-3xl">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt={`Avatar de ${displayName}`} className="size-full object-cover" />
+              ) : (
+                initials
+              )}
+              {loading && <span className="absolute inset-0 animate-pulse bg-muted/80" aria-label="Chargement du compte" />}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="max-w-full truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+                  {loading ? 'Chargement du profil…' : displayName}
+                </h2>
+                {profile?.is_moderator ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    <ShieldCheck className="size-3.5" aria-hidden="true" />
+                    Modérateur
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                <Mail className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{user?.email ?? 'Connectez-vous pour retrouver votre compte'}</span>
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5">
+                  <UserRound className="size-3.5" aria-hidden="true" />
+                  Membre CinéTrack
+                </span>
+                {memberSince ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="size-3.5" aria-hidden="true" />
+                    Depuis {memberSince}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              <EditProfileButton />
+              <SignOutButton />
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-10" aria-labelledby="profile-activity-heading">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">Votre cinéma</p>
+              <h2 id="profile-activity-heading" className="mt-1 text-2xl font-semibold tracking-tight">Votre activité</h2>
+            </div>
+            <Link href="/mes-listes" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition hover:text-foreground">
+              Voir mes listes <ArrowUpRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+          <ProfileStatsSection />
+        </section>
+
+        <section className="mt-10 flex flex-col gap-4 rounded-3xl border border-destructive/20 bg-destructive/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div>
+            <h2 className="font-semibold">Zone sensible</h2>
+            <p className="mt-1 text-sm text-muted-foreground">La suppression du compte et de vos données est définitive.</p>
+          </div>
+          <DeleteAccountButton />
+        </section>
+      </div>
+    </Shell>
+  )
+}
 function Stat({ icon, value, label }: { icon: React.ReactNode, value: string, label: string }) { return <div className="rounded-2xl border border-border bg-card p-5"><div className="text-primary">{icon}</div><div className="mt-4 text-xl font-semibold">{value}</div><div className="mt-1 text-sm text-muted-foreground">{label}</div></div> }
 
 function RecommendationsPage() {

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { type FormEvent, useEffect, useState } from 'react'
 import { MessageCircle, Pencil, Plus, Search, Send, Trash2 } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
-import { FORUM_CATEGORIES, type ForumCategory } from '@/lib/forum-types'
+import { FORUM_CATEGORIES, maskForumInsults, type ForumCategory } from '@/lib/forum-types'
 
 type ForumTopic = {
   id: string
@@ -101,7 +101,7 @@ export default function ForumPage() {
   }
 
   async function deleteTopic(topic: ForumTopic) {
-    if (!window.confirm(`Supprimer « ${topic.title} » et toutes ses réponses ?`)) return
+    if (!window.confirm(`Supprimer « ${maskForumInsults(topic.title)} » et toutes ses réponses ?`)) return
     setError(null)
     try {
       const response = await fetch(`/api/forum/${topic.id}`, { method: 'DELETE' })
@@ -146,8 +146,8 @@ export default function ForumPage() {
           {loading ? <p className="py-12 text-center text-muted-foreground">Chargement des discussions...</p> : visibleTopics.length === 0 ? <div className="rounded-lg border border-dashed border-border py-14 text-center"><MessageCircle className="mx-auto size-8 text-muted-foreground" /><h2 className="mt-3 font-semibold">Aucune discussion pour le moment</h2><p className="mt-1 text-sm text-muted-foreground">Soyez la première personne à lancer la conversation.</p></div> : visibleTopics.map(topic => {
             const canManage = Boolean(user && (user.id === topic.author_id || profile?.is_moderator))
             return <article key={topic.id} className="rounded-lg border border-border bg-card p-5 transition hover:border-primary/50">
-              <div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">{topic.category}</span><Link href={`/forum/${topic.id}`} className="mt-3 block text-lg font-semibold hover:text-primary">{topic.title}</Link><p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{topic.content}</p></div><div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground"><MessageCircle className="size-4" />{topic.reply_count}</div></div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"><p className="text-xs text-muted-foreground">{topic.author_username} · {new Date(topic.created_at).toLocaleDateString('fr-FR')}</p>{canManage && <div className="flex gap-1"><button aria-label="Modifier la discussion" title="Modifier" onClick={() => openForm(topic)} className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button><button aria-label="Supprimer la discussion" title="Supprimer" onClick={() => void deleteTopic(topic)} className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="size-4" /></button></div>}</div>
+              <div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">{topic.category}</span><Link href={`/forum/${topic.id}`} className="mt-3 block text-lg font-semibold hover:text-primary">{maskForumInsults(topic.title)}</Link><p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{maskForumInsults(topic.content)}</p></div><div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground"><MessageCircle className="size-4" />{topic.reply_count}</div></div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"><p className="text-xs text-muted-foreground">{maskForumInsults(topic.author_username)} · {new Date(topic.created_at).toLocaleDateString('fr-FR')}</p>{canManage && <div className="flex gap-1"><button aria-label="Modifier la discussion" title="Modifier" onClick={() => openForm(topic)} className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button><button aria-label="Supprimer la discussion" title="Supprimer" onClick={() => void deleteTopic(topic)} className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="size-4" /></button></div>}</div>
             </article>
           })}
         </div>
